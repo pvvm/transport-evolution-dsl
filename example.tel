@@ -1,0 +1,49 @@
+scheduler_t schedul_1 {
+
+    bool ack_drop(queue_t ack_queue, event_t ACK) {
+
+        int a = 1 + 2;
+        int b = a && 1;
+        foreach event in ack_queue {
+            a = a + b * (b + 1);
+            if(!a >= b) {
+                a = 0;
+            } else {
+                b = 1;
+            }
+        }
+    }
+
+    event_t ACK {
+        int if;
+        int b;
+    };
+    
+    queue_t <ACK> ack_queue(1, 3, 10, ack_drop);
+
+    bool enqueue(event_t e) {
+        int 2b = 2;
+        return a;
+    }
+
+    event_t next_event() {
+        bool a = 1;
+        bool b = 0;
+        if(a == b || b != a) {
+            return e;
+        }
+    }
+}
+
+dispatch_table_t table = {
+    ACK -> {ACKProcessor}
+};
+
+processor_t ACKProcessor(event_t e) {
+    
+}
+
+state_record_t id {
+    int a;
+    int b;
+}
