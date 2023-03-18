@@ -1,7 +1,6 @@
 scheduler_t schedul_1 {
 
     bool ack_drop(queue_t ack_queue, event_t ACK) {
-
         int a = 1 + 2;
         int b = a && 1;
         foreach event in ack_queue {
