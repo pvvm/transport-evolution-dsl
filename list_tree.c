@@ -31,12 +31,28 @@ void printTree(struct ListNode* node, int printSpacing){
         printf("|-> %s\n", node->symbol);
     }
 
-    if(node->son != NULL) {
+    if(node->son) {
         printTree(node->son, ++printSpacing);
         --printSpacing;
     }
-    while(node->next != NULL){
+    while(node->next){
         printTree(node->next, printSpacing);
         node = node->next;
     }
+}
+
+
+/*
+Frees memory allocated for the tree.
+Returns a pointer to the next node pointed by the parameterized node
+node: pointer to a node which will be freed
+*/
+struct ListNode* freeTree(struct ListNode* node) {
+    while(node->son) {
+        node->son = freeTree(node->son);
+    }
+    struct ListNode* aux = node->next;
+    node->next = NULL;
+    free(node);
+    return aux;
 }

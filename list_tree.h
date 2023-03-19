@@ -28,11 +28,17 @@ struct ListNode* createNode(char *, struct ListNode*, struct ListNode*);
 
 /*
 Prints the tree
-structListNode*: pointer to a node which might be printed
+struct ListNode*: pointer to a node which might be printed
 int: number of spaces necessary to print a "branch" of the tree
 */
 void printTree(struct ListNode*, int);
 
-// Create function to free tree
+
+/*
+Frees memory allocated for the tree
+Returns a pointer to the next node pointed by the parameterized node
+struct ListNode*: pointer to a node which will be freed
+*/
+struct ListNode* freeTree(struct ListNode*);
 
 #endif

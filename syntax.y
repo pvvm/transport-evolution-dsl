@@ -43,7 +43,8 @@ struct ListNode * helper;
 
 attribution:    ID ATTRIB_OP attribution                {helper = createNode($1.symbol, NULL, $3);
                                                         root = createNode($2.symbol, helper, NULL);
-                                                        printTree(root, 0);}
+                                                        printTree(root, 0);
+                                                        freeTree(root);}
                 | logicalOr                             {root = $1; /*$$ = $1;*/}
                 ;
 
