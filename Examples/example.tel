@@ -154,6 +154,40 @@ comCondition:   IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B
                 ;
 
 dropLoop:       FOREACH ID IN ID OPEN_B dropMultStmt CLOSE_B
+                                                        {helper = createNode($4.symbol, NULL, $6);
+                                                        helper2 = createNode($2.symbol, NULL, helper);
+                                                        $$ = createNode("foreach", helper2, NULL);}
+                ;
+
+comLoop:        FOR OPEN_P loopArgs CLOSE_P OPEN_B comMultStmt CLOSE_B
+                                                        {helper = createNode("loopStmts", $6, NULL);
+                                                        $3->next = helper;
+                                                        $$ = createNode("for", $3, NULL);
+                                                        printTree($$, 0);
+                                                        freeTree($$);}
+                ;
+
+loopArgs:       firstArgument SEMIC argument SEMIC argument 
+                                                        {$3->next = $5;
+                                                        $1->next = $3;
+                                                        $$ = createNode("loopArgs", $1, NULL);}
+                ;
+
+firstArgument:  varDecl                                 {$$ = $1;}
+                | attribution                           {$$ = $1;}
+                | /* empty */                           {$$ = NULL;}
+                ;
+
+argument:       attribution                             {$$ = $1;}
+                | /* empty */                           {$$ = NULL;}
+                ;
+
+return:         RETURN attribution                      {$$ = createNode($1.symbol, $2, NULL);}
+                ;
+
+varDecl:        INT_T ID                                {$$ = NULL;}
+                | INT_T ID ATTRIB_OP attribution        {helper = createNode($2.symbol, NULL, $4);
+                                                        $$ = createNode($3.symbol, helper, NULL);}
                 ;
 
 comLoop:        FOR OPEN_P loopArgs CLOSE_P OPEN_B comMultStmt CLOSE_B

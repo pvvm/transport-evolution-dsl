@@ -1,1 +1,3 @@
-int a =  1 - 4 > 3 < 5 + -!2 * type(3) - 1
+foreach a in b {
+    a = 0 + 1 -(i * 2);
+}

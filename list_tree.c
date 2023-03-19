@@ -10,7 +10,7 @@ next: pointer to the next node
 */
 struct ListNode* createNode(char *symbol, struct ListNode* son, struct ListNode* next) {
     struct ListNode * node = (struct ListNode *) malloc(sizeof(struct ListNode));
-
+    printf("%s\n", symbol);
     strcpy(node->symbol, symbol);
     node->son = son;
     node->next = next;
