@@ -1,7 +1,13 @@
 %{
 #include <stdio.h>
+#include <string.h>
+
+#include "syntax.tab.h"
+
 int line = 1;
 int column = 1;
+
+void tokenCreator();
 %}
 
 %option nounput
@@ -14,7 +20,8 @@ NEW_TYPE        (event_t|queue_t|scheduler_t|dispatch_table_t|processor_t|state_
 CONST_INT       [0-9]+
 
 MATH_HIGH_OP    [\*/]
-MATH_LOW_OP     [\+\-]
+MATH_ADD_OP     [\+]
+MATH_SUB_OP     [\-]
 LOGIC_OR_OP     (\|\|)
 LOGIC_AND_OP    (&&)
 LOGIC_NOT_OP    (!)
@@ -29,112 +36,111 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
     /* Rules */
 
     /* Types (int bool) */
-{COMMON_TYPE}   {printf("CT %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{COMMON_TYPE}   {tokenCreator();
+                return COMMON_TYPE;}
 
     /* New types */
-{NEW_TYPE}      {printf("NT %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{NEW_TYPE}      {tokenCreator();
+                return NEW_TYPE;}
 
     /* Integer constant */
-{CONST_INT}     {printf("INT %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{CONST_INT}     {tokenCreator();
+                return CONST_INT;}
 
     /* High precedence mathematical operators (* /) */
-{MATH_HIGH_OP}  {printf("MH %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{MATH_HIGH_OP}  {tokenCreator();
+                return MATH_HIGH_OP;}
 
-    /* Low precedence mathematical operators (+ -) */
-{MATH_LOW_OP}   {printf("ML %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+    /* Low precedence mathematical operator (+) */
+{MATH_ADD_OP}   {tokenCreator();
+                return MATH_ADD_OP;}
+
+    /* Low precedence mathematical operator and negative (-) */
+{MATH_SUB_OP}   {tokenCreator();
+                return MATH_SUB_OP;}
 
     /* Logical OR operator (||) */
-{LOGIC_OR_OP}   {printf("LO %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{LOGIC_OR_OP}   {tokenCreator();
+                return LOGIC_OR_OP;}
 
     /* Logical AND operator (&&) */
-{LOGIC_AND_OP}  {printf("LA %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{LOGIC_AND_OP}  {tokenCreator();
+                return LOGIC_AND_OP;}
 
     /* Logical NOT operator (!) */
-{LOGIC_NOT_OP}  {printf("LN %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{LOGIC_NOT_OP}  {tokenCreator();
+                return LOGIC_NOT_OP;}
 
     /* Greater than and Lesser than (> <) */
-{GREAT_LESS_OP} {printf("GL %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{GREAT_LESS_OP} {tokenCreator();
+                return GREAT_LESS_OP;}
 
     /* Greater or equal and Lesser or equal (>= <=) */
-{RELAT_HIGH_OP} {printf("RH %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{RELAT_HIGH_OP} {tokenCreator();
+                return RELAT_HIGH_OP;}
 
     /* Equal and Different (== !=) */
-{RELAT_LOW_OP}  {printf("RL %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{RELAT_LOW_OP}  {tokenCreator();
+                return RELAT_LOW_OP;}
 
     /* Attribution operator (=) */
-{ATTRIB_OP}     {printf("AT %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{ATTRIB_OP}     {tokenCreator();
+                return ATTRIB_OP;}
 
-"if"            {printf("IF %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+"if"            {tokenCreator();
+                return IF;}
 
-"else"          {printf("EL %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+"else"          {tokenCreator();
+                return ELSE;}
 
-"foreach"       {printf("FO %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+"foreach"       {tokenCreator();
+                return FOREACH;}
 
-"in"            {printf("IN %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+"in"            {tokenCreator();
+                return IN;}
 
-"return"        {printf("RE %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+"return"        {tokenCreator();
+                return RETURN;}
 
-{ID}            {printf("ID %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+"type"          {tokenCreator();
+                return TYPE;}
 
-"{"             {printf("OB %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+{ID}            {tokenCreator();
+                return ID;}
 
-"}"             {printf("CB %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+"{"             {tokenCreator();
+                return OPEN_B;}
 
-"("             {printf("OP %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+"}"             {tokenCreator();
+                return CLOSE_B;}
 
-")"             {printf("CP %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+"("             {tokenCreator();
+                return OPEN_P;}
 
-","             {printf("CO %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+")"             {tokenCreator();
+                return CLOSE_P;}
 
-";"             {printf("SE %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+","             {tokenCreator();
+                return COMMA;}
 
-"->"            {printf("AR %s\t%d\t%d\n", yytext, line, column);
-                column += yyleng;}
+";"             {tokenCreator();
+                return SEMIC;}
+
+"->"            {tokenCreator();
+                return ARROW;}
 
 \n              {++line;    column = 1;}
 
 [\t ]           column += yyleng;
 
-.               {printf("Lexical error! %s\t%d\t%d\n", yytext, line, column);
+.               {printf("Lexical error: %s Line: %d Column: %d\n", yytext, line, column);
                 column += yyleng;}
 
 %%
 
-
-int main(int argc, char **argv) {
-
-    if(argc > 1) {
-        yyin = fopen(argv[1], "r");
-        if(!yyin)
-            return 1;
-
-        yylex();
-        fclose(yyin);
-        yylex_destroy();
-    }
-    return 0;
+void tokenCreator() {
+    strcpy(yylval.token.symbol, yytext);
+    yylval.token.line = line;
+    yylval.token.column = column;
+    column += yyleng;
 }
