@@ -3,12 +3,16 @@
 
 %{
 #include <stdio.h>
+#include "list_tree.h"
 
 extern int yylex(void);
 extern int yylex_destroy(void);
 extern char * yytext;
 extern FILE *yyin;
 void yyerror(const char *);
+
+struct ListNode * root;
+struct ListNode * helper;
 %}
 
 %code requires {
@@ -21,6 +25,7 @@ void yyerror(const char *);
 
 %union {
     struct token token;
+    struct ListNode* node;
 }
 
 %token <token> COMMON_TYPE NEW_TYPE CONST_INT MATH_HIGH_OP MATH_ADD_OP
@@ -29,51 +34,64 @@ void yyerror(const char *);
 %token <token> IN RETURN TYPE ID OPEN_B CLOSE_B OPEN_P CLOSE_P
 %token <token> COMMA SEMIC ARROW
 
+%type <node> attribution logicalOr logicalAnd compareExp relationExp
+%type <node> lowMathExp highMathExp unaryExp element
+
 %start attribution
 
 %%
 
-attribution:    ID ATTRIB_OP attribution    {printf("1" );}
-                | logicalOr {printf("2 ");}
+attribution:    ID ATTRIB_OP attribution                {helper = createNode($1.symbol, NULL, $3);
+                                                        root = createNode($2.symbol, helper, NULL);
+                                                        printTree(root, 0);}
+                | logicalOr                             {root = $1; /*$$ = $1;*/}
                 ;
 
-logicalOr:      logicalOr LOGIC_OR_OP logicalAnd {printf("3 ");}
-                | logicalAnd {printf("4 ");}
+logicalOr:      logicalOr LOGIC_OR_OP logicalAnd        {$1->next = $3;
+                                                        $$ = createNode($2.symbol, $1, NULL);}
+                | logicalAnd                            {$$ = $1;}
                 ;
 
-logicalAnd:     logicalAnd LOGIC_AND_OP compareExp {printf("5 ");}
-                | compareExp {printf("6 ");}
+logicalAnd:     logicalAnd LOGIC_AND_OP compareExp      {$1->next = $3;
+                                                        $$ = createNode($2.symbol, $1, NULL);}
+                | compareExp                            {$$ = $1;}
                 ;
 
-compareExp:     compareExp RELAT_LOW_OP relationExp {printf("7 ");}
-                | relationExp {printf("8 ");}
+compareExp:     compareExp RELAT_LOW_OP relationExp     {$1->next = $3;
+                                                        $$ = createNode($2.symbol, $1, NULL);}
+                | relationExp                           {$$ = $1;}
                 ;
 
-relationExp:    relationExp GREAT_LESS_OP lowMathExp {printf("9 ");}
-                | relationExp RELAT_HIGH_OP lowMathExp {printf("10 ");}
-                | lowMathExp {printf("11 ");}
+relationExp:    relationExp GREAT_LESS_OP lowMathExp    {$1->next = $3;
+                                                        $$ = createNode($2.symbol, $1, NULL);}
+                | relationExp RELAT_HIGH_OP lowMathExp  {$1->next = $3;
+                                                        $$ = createNode($2.symbol, $1, NULL);}
+                | lowMathExp                            {$$ = $1;}
                 ;
 
-lowMathExp:     lowMathExp MATH_ADD_OP highMathExp {printf("12 ");}
-                | lowMathExp MATH_SUB_OP highMathExp {printf("13 ");}
-                | highMathExp {printf("14 ");}
+lowMathExp:     lowMathExp MATH_ADD_OP highMathExp      {$1->next = $3;
+                                                        $$ = createNode($2.symbol, $1, NULL);}
+                | lowMathExp MATH_SUB_OP highMathExp    {$1->next = $3;
+                                                        $$ = createNode($2.symbol, $1, NULL);}
+                | highMathExp                           {$$ = $1;}
                 ;
 
-highMathExp:    highMathExp MATH_HIGH_OP unaryExp {printf("15 ");}
-                | unaryExp {printf("16 ");}
+highMathExp:    highMathExp MATH_HIGH_OP unaryExp       {$1->next = $3;
+                                                        $$ = createNode($2.symbol, $1, NULL);}
+                | unaryExp                              {$$ = $1;}
                 ;
 
 
-unaryExp:       LOGIC_NOT_OP unaryExp {printf("17 ");}
-                | MATH_SUB_OP unaryExp {printf("18 ");}
-                | TYPE OPEN_P unaryExp CLOSE_P {printf("19 ");}
-                | element {printf("20 ");}
+unaryExp:       LOGIC_NOT_OP unaryExp                   {$$ = createNode($1.symbol, $2, NULL);}
+                | MATH_SUB_OP unaryExp                  {$$ = createNode($1.symbol, $2, NULL);}
+                | TYPE OPEN_P unaryExp CLOSE_P          {$$ = createNode($1.symbol, $3, NULL);}
+                | element                               {$$ = $1;}
                 ;
 
 //completar aqui
-element:        ID {printf("21 ");}
-                | CONST_INT {printf("22 ");}
-                | OPEN_P attribution CLOSE_P {printf("23 ");}
+element:        ID                                      {$$ = createNode($1.symbol, NULL, NULL);}
+                | CONST_INT                             {$$ = createNode($1.symbol, NULL, NULL);}
+                | OPEN_P attribution CLOSE_P            {$$ = $2;}
                 ;
 
 %%
@@ -87,6 +105,9 @@ int main(int arc, char **argv) {
     if(fp) {
         yyin = fp;
         yyparse();
+    } else {
+        printf("Wrong file input\n");
+        return 1;
     }
     fclose(fp);
     yylex_destroy();
