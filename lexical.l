@@ -14,8 +14,14 @@ void tokenCreator();
 %option noinput
 %option noyywrap
 
-COMMON_TYPE     (int|bool)
-NEW_TYPE        (event_t|queue_t|scheduler_t|dispatch_table_t|processor_t|state_record_t)
+INT_T           (int)
+BOOL_T          (bool)
+EVENT_T         (event_t)
+QUEUE_T         (queue_t)
+SCHEDULER_T     (scheduler_t)
+DISPATCH_T_T    (dispatch_table_t)
+PROCESSOR_T     (processor_t)
+STATE_R_T       (state_record_t)
 
 CONST_INT       [0-9]+
 
@@ -25,7 +31,6 @@ MATH_SUB_OP     [\-]
 LOGIC_OR_OP     (\|\|)
 LOGIC_AND_OP    (&&)
 LOGIC_NOT_OP    (!)
-GREAT_LESS_OP   (<|>)
 RELAT_HIGH_OP   (<=|>=)
 RELAT_LOW_OP    (==|!=)
 ATTRIB_OP       (=)
@@ -35,13 +40,31 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 %%
     /* Rules */
 
-    /* Types (int bool) */
-{COMMON_TYPE}   {tokenCreator();
-                return COMMON_TYPE;}
+    /* Common types (int bool) */
+{INT_T}         {tokenCreator();
+                return INT_T;}
+
+{BOOL_T}        {tokenCreator();
+                return BOOL_T;}
 
     /* New types */
-{NEW_TYPE}      {tokenCreator();
-                return NEW_TYPE;}
+{EVENT_T}       {tokenCreator();
+                return EVENT_T;}
+
+{QUEUE_T}       {tokenCreator();
+                return QUEUE_T;}
+
+{SCHEDULER_T}   {tokenCreator();
+                return SCHEDULER_T;}
+
+{DISPATCH_T_T}  {tokenCreator();
+                return DISPATCH_T_T;}
+
+{PROCESSOR_T}   {tokenCreator();
+                return PROCESSOR_T;}
+
+{STATE_R_T}     {tokenCreator();
+                return STATE_R_T;}
 
     /* Integer constant */
 {CONST_INT}     {tokenCreator();
@@ -72,8 +95,11 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
                 return LOGIC_NOT_OP;}
 
     /* Greater than and Lesser than (> <) */
-{GREAT_LESS_OP} {tokenCreator();
-                return GREAT_LESS_OP;}
+">"             {tokenCreator();
+                return GREATER_OP;}
+
+"<"             {tokenCreator();
+                return LESSER_OP;}
 
     /* Greater or equal and Lesser or equal (>= <=) */
 {RELAT_HIGH_OP} {tokenCreator();
@@ -93,6 +119,9 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "else"          {tokenCreator();
                 return ELSE;}
 
+"for"           {tokenCreator();
+                return FOR;}
+
 "foreach"       {tokenCreator();
                 return FOREACH;}
 
@@ -104,6 +133,12 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 
 "type"          {tokenCreator();
                 return TYPE;}
+
+"next_event"    {tokenCreator();
+                return NEXT_EVENT;}
+
+"enqueue"       {tokenCreator();
+                return ENQUEUE;}
 
 {ID}            {tokenCreator();
                 return ID;}
