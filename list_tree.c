@@ -25,24 +25,22 @@ node: pointer to a node which might be printed
 printSpacing: number of spaces necessary to print a "branch" of the tree
 */
 void printTree(struct ListNode* node, int printSpacing){
-    printf("%p %p %p", node, node->son, node->next);
-    //if(strcmp(node->symbol, "") && strcmp(node->symbol, "ignore")) {
+    //printf("%p %p %p", node, node->son, node->next);
+    if(strcmp(node->symbol, "")) {
         for(int i = 0; i < printSpacing; i++)
             printf("|    ");
         printf("|-> %s\n", node->symbol);
-    //}
+    }
 
     if(node->son) {
-        if(strcmp(node->symbol, "ignore"))
+        if(strcmp(node->symbol, ""))
             ++printSpacing;
         printTree(node->son, printSpacing);
-        if(strcmp(node->symbol, "ignore"))
+        if(strcmp(node->symbol, ""))
             --printSpacing;
     }
-    while(node->next){
+    if(node->next)
         printTree(node->next, printSpacing);
-        node = node->next;
-    }
 }
 
 
