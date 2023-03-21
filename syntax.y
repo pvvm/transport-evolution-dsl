@@ -51,20 +51,22 @@ struct ListNode * helper3;
 
 %%
 
-program:        declarations                            {$$ = $1;
-                                                        printTree($$, 0);}
+program:        declarations                            {$$ = createNode("program", $1, NULL);
+                                                        printTree($$, 0);
+                                                        freeTree($$);}
                 | /* empty */                           {$$ = NULL;}
                 ;
 
 declarations:   scheduler dispatcher processorMult stateRecord
-                                                        {$3->next = $4;
-                                                        $2->next = $3;
-                                                        $1->next = $2;
-                                                        $$ = $1;}
+                                                        {helper = createNode("ignore", $4, NULL);
+                                                        helper2 = createNode("ignore", $3, helper);
+                                                        helper3 = createNode("ignore", $2, helper2);
+                                                        $$ = createNode("ignore", $1, helper3);}
                 ;
 
 dispatcher:     DISPATCH_T_T ID ATTRIB_OP OPEN_B dispMult CLOSE_B SEMIC
-                                                        {$$ = createNode($2.symbol, $5, NULL);}
+                                                        {helper = createNode($2.symbol, $5, NULL);
+                                                        $$ = createNode("dispatcherDecl", helper, NULL);}
                 ;
 
 dispMult:       dispMult COMMA dispDecl                 {$1->next = $3;
@@ -76,41 +78,45 @@ dispDecl:       ID ARROW OPEN_B processorIds CLOSE_B SEMIC
                                                         {$$ = createNode($1.symbol, $4, NULL);}
                 ;
 
-processorIds:   processorIds COMMA ID                   {$$ = createNode($3.symbol, $1, NULL);}
+processorIds:   ID COMMA processorIds                   {$$ = createNode($1.symbol, NULL, $3);}
                 | ID                                    {$$ = createNode($1.symbol, NULL, NULL);}
                 ;
 
-processorMult:  processorMult processorDecl             {$1->next = $2;
-                                                        $$ = $1;}
+processorMult:  processorMult processorDecl             {helper = createNode("ignore", $2, NULL);
+                                                        $$ = createNode("ignore", $1, helper);}
                 | processorDecl                         {$$ = $1;}
                 ;
 
-processorDecl:  PROCESSOR_T ID OPEN_B comMultStmt CLOSE_B
-                                                        {$$ = createNode($2.symbol, $4, NULL);}
+processorDecl:  PROCESSOR_T ID OPEN_P EVENT_T ID CLOSE_P OPEN_B comMultStmt CLOSE_B
+                                                        {helper = createNode($2.symbol, $8, NULL);
+                                                        $$ = createNode("processorDecl", helper, NULL);}
                 ;
 
 stateRecord:    STATE_R_T ID OPEN_B srVariables CLOSE_B
-                                                        {$$ = createNode($2.symbol, $4, NULL);}
+                                                        {helper = createNode($2.symbol, $4, NULL);
+                                                        $$ = createNode("stateRecordDecl", helper, NULL);}
                 ;
 
-srVariables:    srVariables INT_T ID SEMIC              {$$ = createNode($3.symbol, $1, NULL);}
+srVariables:    INT_T ID SEMIC srVariables              {$$ = createNode($2.symbol, NULL, $4);}
                 | INT_T ID SEMIC                        {$$ = createNode($2.symbol, NULL, NULL);}
                 ;
 
 scheduler:      SCHEDULER_T ID OPEN_B queues enquFunc nextEvent CLOSE_B
-                                                        {$5->next = $6;
-                                                        $4->next = $5;
-                                                        $$ = createNode($2.symbol, $4, NULL);}
+                                                        {helper = createNode("ignore", $6, NULL);
+                                                        helper2 = createNode("ignore", $5, helper);
+                                                        helper = createNode("ignore", $4, helper2);
+                                                        helper3 = createNode($2.symbol, helper, NULL);
+                                                        $$ = createNode("schedulerDecl", helper3, NULL);}
                 ;
 
-queues:         queues queueAndDrop                     {$1->next = $2;
-                                                        $$ = $1;}
+queues:         queues queueAndDrop                     {helper = createNode("ignore", $2, NULL);
+                                                        $$ = createNode("ignore", $1, helper);}
                 | queueAndDrop                          {$$ = $1;}
                 ;
 
-queueAndDrop:   qTypeDecl dropDecl queueDecl            {$2->next = $3;
-                                                        $1->next = $2;
-                                                        $$ = $1;}
+queueAndDrop:   qTypeDecl dropDecl queueDecl            {helper = createNode("ignore", $3, NULL);
+                                                        helper2 = createNode("ignore", $2, helper);
+                                                        $$ = createNode("ignore", $1, helper2);}
                 ;
 
 qTypeDecl:      queueType                               {$$ = $1;}
@@ -118,15 +124,17 @@ qTypeDecl:      queueType                               {$$ = $1;}
                 ;
 
 queueType:      EVENT_T ID OPEN_B queueTypeDecl CLOSE_B SEMIC
-                                                        {$$ = createNode($2.symbol, $4, NULL);}
+                                                        {helper = createNode($2.symbol, $4, NULL);
+                                                        $$ = createNode("eventDecl", helper, NULL);}
                 ;
 
-queueTypeDecl:  queueTypeDecl INT_T ID SEMIC            {$$ = createNode($3.symbol, $1, NULL);}
+queueTypeDecl:  INT_T ID SEMIC queueTypeDecl            {$$ = createNode($2.symbol, NULL, $4);}
                 | INT_T ID SEMIC                        {$$ = createNode($2.symbol, NULL, NULL);}
                 ;
 
-queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID OPEN_P CONST_INT COMMA CONST_INT COMMA CONST_INT COMMA ID CLOSE_P
-                                                        {$$ = createNode($5.symbol, NULL, NULL);}
+queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID OPEN_P CONST_INT COMMA CONST_INT COMMA CONST_INT COMMA ID CLOSE_P SEMIC
+                                                        {helper = createNode($5.symbol, NULL, NULL);
+                                                        $$ = createNode("queueDecl", helper, NULL);}
                 ;
 
 dropDecl:       dropFunc                                {$$ = $1;}
@@ -134,19 +142,22 @@ dropDecl:       dropFunc                                {$$ = $1;}
                 ;
 
 dropFunc:       INT_T ID OPEN_P QUEUE_T ID COMMA EVENT_T ID CLOSE_P OPEN_B dropMultStmt CLOSE_B
-                                                        {$$ = createNode($2.symbol, $11, NULL);}
+                                                        {helper = createNode($2.symbol, $11, NULL);
+                                                        $$ = createNode("dropDecl", helper, NULL);}
                 ;
 
 enquFunc:       BOOL_T ENQUEUE OPEN_P EVENT_T ID CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {$$ = createNode($2.symbol, $8, NULL);}
+                                                        {helper = createNode($2.symbol, $8, NULL);
+                                                        $$ = createNode("enqueueDecl", helper, NULL);}
                 ;
 
 nextEvent:      EVENT_T NEXT_EVENT OPEN_P CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {$$ = createNode($2.symbol, $6, NULL);}
+                                                        {helper = createNode($2.symbol, $6, NULL);
+                                                        $$ = createNode("nextEventDecl", helper, NULL);}
                 ;
 
-dropMultStmt:   dropMultStmt dropStmt                   {$1->next = $2;
-                                                        $$ = $1;}
+dropMultStmt:   dropMultStmt dropStmt                   {helper = createNode("ignore", $2, NULL);
+                                                        $$ = createNode("ignore", $1, helper);}
                 | dropStmt                              {$$ = $1;}
                 ;
 
@@ -170,36 +181,39 @@ commonStmt:     comCondition                            {$$ = $1;}
                 ;
 
 dropCondition:   IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B
-                                                        {$3->next = $6;
-                                                        $$ = createNode("ifelse", $3, NULL);}
+                                                        {helper = createNode("ifStmts", $6, NULL);
+                                                        helper2 = createNode("ifArg", $3, helper);
+                                                        $$ = createNode("if", helper2, NULL);}
                 | IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B ELSE OPEN_B dropMultStmt CLOSE_B
-                                                        {$6->next = $10;
-                                                        $3->next = $6;
-                                                        $$ = createNode("ifelse", $3, NULL);}
+                                                        {helper = createNode("elseStmts", $10, NULL);
+                                                        helper2 = createNode("ifStmts", $6, helper);
+                                                        helper3 = createNode("ifArg", $3, helper2);
+                                                        $$ = createNode("ifelse", helper3, NULL);}
                 ;
 
 comCondition:   IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {$3->next = $6;
-                                                        $$ = createNode("ifelse", $3, NULL);}
+                                                        {helper = createNode("ifStmts", $6, NULL);
+                                                        helper2 = createNode("ifArg", $3, helper);
+                                                        $$ = createNode("if", helper2, NULL);}
 
                 | IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B ELSE OPEN_B comMultStmt CLOSE_B
-                                                        {$6->next = $10;
-                                                        $3->next = $6;
-                                                        $$ = createNode("ifelse", $3, NULL);}
+                                                        {helper = createNode("elseStmts", $10, NULL);
+                                                        helper2 = createNode("ifStmts", $6, helper);
+                                                        helper3 = createNode("ifArg", $3, helper2);
+                                                        $$ = createNode("ifelse", helper3, NULL);}
                 ;
 
 dropLoop:       FOREACH ID IN ID OPEN_B dropMultStmt CLOSE_B
-                                                        {helper = createNode($4.symbol, NULL, $6);
-                                                        helper2 = createNode($2.symbol, NULL, helper);
-                                                        $$ = createNode("foreach", helper2, NULL);}
+                                                        {helper = createNode("loopStmts", $6, NULL);
+                                                        helper2 = createNode($4.symbol, NULL, helper);
+                                                        helper3 = createNode($2.symbol, NULL, helper2);
+                                                        $$ = createNode("foreach", helper3, NULL);}
                 ;
 
 comLoop:        FOR OPEN_P loopArgs CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {helper = createNode("loopStmts", $6, NULL);
                                                         $3->next = helper;
-                                                        $$ = createNode("for", $3, NULL);
-                                                        printTree($$, 0);
-                                                        freeTree($$);}
+                                                        $$ = createNode("for", $3, NULL);}
                 ;
 
 loopArgs:       firstArgument SEMIC argument SEMIC argument 

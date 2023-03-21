@@ -10,7 +10,7 @@ next: pointer to the next node
 */
 struct ListNode* createNode(char *symbol, struct ListNode* son, struct ListNode* next) {
     struct ListNode * node = (struct ListNode *) malloc(sizeof(struct ListNode));
-    printf("%s\n", symbol);
+
     strcpy(node->symbol, symbol);
     node->son = son;
     node->next = next;
@@ -25,15 +25,19 @@ node: pointer to a node which might be printed
 printSpacing: number of spaces necessary to print a "branch" of the tree
 */
 void printTree(struct ListNode* node, int printSpacing){
-    if(strcmp(node->symbol, "")) {
+    printf("%p %p %p", node, node->son, node->next);
+    //if(strcmp(node->symbol, "") && strcmp(node->symbol, "ignore")) {
         for(int i = 0; i < printSpacing; i++)
             printf("|    ");
         printf("|-> %s\n", node->symbol);
-    }
+    //}
 
     if(node->son) {
-        printTree(node->son, ++printSpacing);
-        --printSpacing;
+        if(strcmp(node->symbol, "ignore"))
+            ++printSpacing;
+        printTree(node->son, printSpacing);
+        if(strcmp(node->symbol, "ignore"))
+            --printSpacing;
     }
     while(node->next){
         printTree(node->next, printSpacing);

@@ -1,6 +1,11 @@
 scheduler_t schedul_1 {
 
-    bool ack_drop(queue_t ack_queue, event_t ACK) {
+    event_t ACK {
+        int a;
+        int b;
+    };
+
+    int ack_drop(queue_t ack_queue, event_t ACK) {
         int a = 1 + 2;
         int b = a && 1;
         foreach event in ack_queue {
@@ -12,22 +17,17 @@ scheduler_t schedul_1 {
             }
         }
     }
-
-    event_t ACK {
-        int if;
-        int b;
-    };
     
     queue_t <ACK> ack_queue(1, 3, 10, ack_drop);
 
     bool enqueue(event_t e) {
-        int 2b = 2;
+        int b = 2;
         return a;
     }
 
     event_t next_event() {
-        bool a = 1;
-        bool b = 0;
+        int a = 1;
+        int b = 0;
         if(a == b || b != a) {
             return e;
         }
@@ -35,190 +35,16 @@ scheduler_t schedul_1 {
 }
 
 dispatch_table_t table = {
-    ACK -> {ACKProcessor}
+    ACK -> {ACKProcessor};
 };
 
 processor_t ACKProcessor(event_t e) {
-    
+    for(int i = 0; i < 10; i = i + 1) {
+        i = a + 2 - 3 < 3 == 5;
+    }
 }
 
-state_record_t id {
+state_record_t test {
     int a;
     int b;
 }
-
-
-
-
-program:        declarations
-                | /* empty */
-                ;
-
-declarations:   scheduler dispatcher processorMult stateRecord
-                ;
-
-dispatcher:     DISPATCH_T_T ID ATTRIB_OP OPEN_B dispMult CLOSE_B SEMIC
-                ;
-
-dispMult:       dispMult COMMA dispDecl
-                | dispDecl
-                ;
-
-dispDecl:       ID ARROW OPEN_B processorIds CLOSE_B SEMIC
-                ;
-
-processorIds:   processorIds COMMA ID
-                | ID
-                ;
-
-processorMult:  processorMult processorDecl
-                | processorDecl
-                ;
-
-processorDecl:  PROCESSOR_T ID OPEN_B comMultStmt CLOSE_B
-                ;
-
-stateRecord:    STATE_R_T ID OPEN_B srVariables CLOSE_B
-                ;
-
-srVariables:    srVariables INT_T ID SEMIC
-                | INT_T ID SEMIC
-                ;
-
-scheduler:      SCHEDULER_T ID OPEN_B queues enquFunc nextEvent CLOSE_B
-                ;
-
-queues:         queues queueAndDrop
-                | queueAndDrop
-                ;
-
-queueAndDrop:   qTypeDecl dropDecl queueDecl
-                ;
-
-qTypeDecl:      queueType
-                | /* empty */
-                ;
-
-queueType:      EVENT_T ID OPEN_B queueTypeDecl CLOSE_B SEMIC
-                ;
-
-queueTypeDecl:  queueTypeDecl INT_T ID SEMIC
-                | INT_T ID SEMIC
-                ;
-
-queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID OPEN_P CONST_INT COMMA CONST_INT COMMA CONST_INT COMMA ID CLOSE_P
-                ;
-
-dropDecl:       dropFunc
-                | /* empty */
-                ;
-
-dropFunc:       INT_T ID OPEN_P QUEUE_T ID COMMA EVENT_T ID CLOSE_P OPEN_B dropMultStmt CLOSE_B
-                ;
-
-enquFunc:       BOOL_T ENQUEUE OPEN_P EVENT_T ID CLOSE_P OPEN_B comMultStmt CLOSE_B
-                ;
-
-nextEvent:      EVENT_T NEXT_EVENT OPEN_P CLOSE_P OPEN_B comMultStmt CLOSE_B
-                ;
-
-dropMultStmt:   dropMultStmt dropStmt
-                | dropStmt
-                ;
-
-dropStmt:       dropCondition
-                | dropLoop
-                | attribution SEMIC
-                | return SEMIC
-                | varDecl SEMIC
-                ;
-
-comMultStmt:    comMultStmt commonStmt
-                | commonStmt
-                ;
-
-commonStmt:     comCondition
-                | comLoop
-                | attribution SEMIC
-                | return SEMIC
-                | varDecl SEMIC
-                ;
-
-dropCondition:   IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B
-                | IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B ELSE OPEN_B dropMultStmt CLOSE_B
-                ;
-
-comCondition:   IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B
-
-                | IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B ELSE OPEN_B comMultStmt CLOSE_B
-                ;
-
-dropLoop:       FOREACH ID IN ID OPEN_B dropMultStmt CLOSE_B
-                                                        {helper = createNode($4.symbol, NULL, $6);
-                                                        helper2 = createNode($2.symbol, NULL, helper);
-                                                        $$ = createNode("foreach", helper2, NULL);}
-                ;
-
-comLoop:        FOR OPEN_P loopArgs CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {helper = createNode("loopStmts", $6, NULL);
-                                                        $3->next = helper;
-                                                        $$ = createNode("for", $3, NULL);
-                                                        printTree($$, 0);
-                                                        freeTree($$);}
-                ;
-
-loopArgs:       firstArgument SEMIC argument SEMIC argument 
-                                                        {$3->next = $5;
-                                                        $1->next = $3;
-                                                        $$ = createNode("loopArgs", $1, NULL);}
-                ;
-
-firstArgument:  varDecl                                 {$$ = $1;}
-                | attribution                           {$$ = $1;}
-                | /* empty */                           {$$ = NULL;}
-                ;
-
-argument:       attribution                             {$$ = $1;}
-                | /* empty */                           {$$ = NULL;}
-                ;
-
-return:         RETURN attribution                      {$$ = createNode($1.symbol, $2, NULL);}
-                ;
-
-varDecl:        INT_T ID                                {$$ = NULL;}
-                | INT_T ID ATTRIB_OP attribution        {helper = createNode($2.symbol, NULL, $4);
-                                                        $$ = createNode($3.symbol, helper, NULL);}
-                ;
-
-comLoop:        FOR OPEN_P loopArgs CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {helper = createNode("loopStmts", $6, NULL);
-                                                        $3->next = helper;
-                                                        $$ = createNode("comLoop", $3, NULL);}
-                ;
-
-loopArgs:       firstArgument SEMIC argument SEMIC argument
-                                                        {$3->next = $5;
-                                                        $1->next = $3;
-                                                        $$ = createNode("loopArgs", $1, NULL);}
-                ;
-
-firstArgument:  varDecl                                 {$$ = $1;}
-                | attribution                           {$$ = $1;}
-                | /* empty */                           {$$ = NULL;}
-                ;
-
-argument:       attribution                             {$$ = $1;}
-                | /* empty */                           {$$ = NULL;}
-                ;
-
-return:         RETURN attribution                      {$$ = createNode($1.symbol, $2, NULL);}
-                ;
-
-varDecl:        INT_T ID                                {$$ = NULL;
-printTree($$, 0);
-freeTree($$);}
-                | INT_T ID ATTRIB_OP attribution        {helper = createNode($2.symbol, NULL, $4);
-                                                        $$ = createNode($3.symbol, helper, NULL);
-                                                        printTree($$, 0);
-freeTree($$);}
-                ;
