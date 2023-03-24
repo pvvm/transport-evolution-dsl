@@ -168,8 +168,8 @@ dropStmt:       dropCondition                           {$$ = $1;}
                 | varDecl SEMIC                         {$$ = $1;}
                 ;
 
-comMultStmt:    comMultStmt commonStmt                  {$1->next = $2;
-                                                        $$ = $1;}
+comMultStmt:    comMultStmt commonStmt                  {helper = createNode("", $2, NULL);
+                                                        $$ = createNode("", $1, helper);}
                 | commonStmt                            {$$ = $1;}
                 ;
 
