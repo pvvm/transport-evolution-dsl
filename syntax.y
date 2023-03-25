@@ -3,7 +3,7 @@
 
 %{
 #include <stdio.h>
-#include "list_tree.h"
+#include "list_tree.hpp"
 
 extern int yylex(void);
 extern int yylex_destroy(void);
@@ -11,10 +11,8 @@ extern char * yytext;
 extern FILE *yyin;
 void yyerror(const char *);
 
-struct ListNode * root;
-struct ListNode * helper;
-struct ListNode * helper2;
-struct ListNode * helper3;
+vector<struct Node*> children;
+vector<struct Node*> emptyVector;
 %}
 
 %code requires {
@@ -27,7 +25,8 @@ struct ListNode * helper3;
 
 %union {
     struct token token;
-    struct ListNode* node;
+    //struct ListNode* node;
+    struct Node* node;
 }
 
 %token <token> INT_T BOOL_T EVENT_T QUEUE_T SCHEDULER_T DISPATCH_T_T
@@ -51,72 +50,91 @@ struct ListNode * helper3;
 
 %%
 
-program:        declarations                            {$$ = createNode("program", $1, NULL);
+program:        declarations                            {children = $1->children;
+                                                        delete $1;
+                                                        $$ = createNode("program", children);
                                                         printTree($$, 0);
                                                         freeTree($$);}
                 | /* empty */                           {$$ = NULL;}
                 ;
 
 declarations:   scheduler dispatcher processorMult stateRecord
-                                                        {helper = createNode("", $4, NULL);
-                                                        helper2 = createNode("", $3, helper);
-                                                        helper3 = createNode("", $2, helper2);
-                                                        $$ = createNode("", $1, helper3);}
+                                                        {children.push_back($1);
+                                                        children.push_back($2);
+                                                        children.push_back($3);
+                                                        children.push_back($4);
+                                                        $$ = createNode("", children);}
                 ;
 
 dispatcher:     DISPATCH_T_T ID ATTRIB_OP OPEN_B dispMult CLOSE_B SEMIC
-                                                        {helper = createNode($2.symbol, $5, NULL);
-                                                        $$ = createNode("dispatcherDecl", helper, NULL);}
+                                                        {children.push_back($5);
+                                                        struct Node * helper = createNode($2.symbol, children);
+                                                        children.push_back(helper);
+                                                        $$ = createNode("dispatcherDecl", children);}
                 ;
 
-dispMult:       dispMult dispDecl                       {$1->next = $2;
-                                                        $$ = $1;}
+dispMult:       dispMult dispDecl                       {children.push_back($1);
+                                                        children.push_back($2);
+                                                        $$ = createNode("", children);}
                 | dispDecl                              {$$ = $1;}
                 ;
 
 dispDecl:       ID ARROW OPEN_B processorIds CLOSE_B SEMIC
-                                                        {$$ = createNode($1.symbol, $4, NULL);}
+                                                        {children.push_back($4);
+                                                        $$ = createNode($1.symbol, children);}
                 ;
 
-processorIds:   ID COMMA processorIds                   {$$ = createNode($1.symbol, NULL, $3);}
-                | ID                                    {$$ = createNode($1.symbol, NULL, NULL);}
+// This too
+processorIds:   ID COMMA processorIds                   {children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
+                | ID                                    {$$ = createNode($1.symbol, emptyVector);}
                 ;
 
-processorMult:  processorMult processorDecl             {helper = createNode("", $2, NULL);
-                                                        $$ = createNode("", $1, helper);}
+processorMult:  processorMult processorDecl             {children.push_back($1);
+                                                        children.push_back($2);
+                                                        $$ = createNode("", children);}
                 | processorDecl                         {$$ = $1;}
                 ;
 
 processorDecl:  PROCESSOR_T ID OPEN_P EVENT_T ID CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {helper = createNode($2.symbol, $8, NULL);
-                                                        $$ = createNode("processorDecl", helper, NULL);}
+                                                        {children.push_back($8);
+                                                        struct Node * helper = createNode($2.symbol, children);
+                                                        children.push_back(helper);
+                                                        $$ = createNode("processorDecl", children);}
                 ;
 
 stateRecord:    STATE_R_T ID OPEN_B srVariables CLOSE_B
-                                                        {helper = createNode($2.symbol, $4, NULL);
-                                                        $$ = createNode("stateRecordDecl", helper, NULL);}
+                                                        {children.push_back($4);
+                                                        struct Node * helper = createNode($2.symbol, children);
+                                                        children.push_back(helper);
+                                                        $$ = createNode("stateRecordDecl", children);}
                 ;
 
-srVariables:    INT_T ID SEMIC srVariables              {$$ = createNode($2.symbol, NULL, $4);}
-                | INT_T ID SEMIC                        {$$ = createNode($2.symbol, NULL, NULL);}
+// This one too
+srVariables:    INT_T ID SEMIC srVariables              {children.push_back($4);
+                                                        $$ = createNode($2.symbol, children);}
+                | INT_T ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
                 ;
 
 scheduler:      SCHEDULER_T ID OPEN_B queues enquFunc nextEvent CLOSE_B
-                                                        {helper = createNode("", $6, NULL);
-                                                        helper2 = createNode("", $5, helper);
-                                                        helper = createNode("", $4, helper2);
-                                                        helper3 = createNode($2.symbol, helper, NULL);
-                                                        $$ = createNode("schedulerDecl", helper3, NULL);}
+                                                        {children.push_back($4);
+                                                        children.push_back($5);
+                                                        children.push_back($6);
+                                                        struct Node * helper = createNode($2.symbol, children);
+                                                        children.push_back(helper);
+                                                        $$ = createNode("schedulerDecl", children);}
                 ;
 
-queues:         queues queueAndDrop                     {helper = createNode("", $2, NULL);
-                                                        $$ = createNode("", $1, helper);}
+queues:         queues queueAndDrop                     {children.push_back($1);
+                                                        children.push_back($2);
+                                                        $$ = createNode("", children);}
                 | queueAndDrop                          {$$ = $1;}
                 ;
 
-queueAndDrop:   qTypeDecl dropDecl queueDecl            {helper = createNode("", $3, NULL);
-                                                        helper2 = createNode("", $2, helper);
-                                                        $$ = createNode("", $1, helper2);}
+queueAndDrop:   qTypeDecl dropDecl queueDecl            {children.push_back($1);
+                                                        children.push_back($2);
+                                                        children.push_back($3);
+                                                        $$ = createNode("", children);}
                 ;
 
 qTypeDecl:      queueType                               {$$ = $1;}
@@ -124,17 +142,22 @@ qTypeDecl:      queueType                               {$$ = $1;}
                 ;
 
 queueType:      EVENT_T ID OPEN_B queueTypeDecl CLOSE_B SEMIC
-                                                        {helper = createNode($2.symbol, $4, NULL);
-                                                        $$ = createNode("eventDecl", helper, NULL);}
+                                                        {children.push_back($4);
+                                                        struct Node * helper = createNode($2.symbol, children);
+                                                        children.push_back(helper);
+                                                        $$ = createNode("eventDecl", children);}
                 ;
 
-queueTypeDecl:  INT_T ID SEMIC queueTypeDecl            {$$ = createNode($2.symbol, NULL, $4);}
-                | INT_T ID SEMIC                        {$$ = createNode($2.symbol, NULL, NULL);}
+// CHECK THIS CASE
+queueTypeDecl:  INT_T ID SEMIC queueTypeDecl            {children.push_back($4);
+                                                        $$ = createNode($2.symbol, children);}
+                | INT_T ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
                 ;
 
 queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID OPEN_P CONST_INT COMMA CONST_INT COMMA CONST_INT COMMA ID CLOSE_P SEMIC
-                                                        {helper = createNode($5.symbol, NULL, NULL);
-                                                        $$ = createNode("queueDecl", helper, NULL);}
+                                                        {struct Node * helper = createNode($5.symbol, emptyVector);
+                                                        children.push_back(helper);
+                                                        $$ = createNode("queueDecl", children);}
                 ;
 
 dropDecl:       dropFunc                                {$$ = $1;}
@@ -142,22 +165,29 @@ dropDecl:       dropFunc                                {$$ = $1;}
                 ;
 
 dropFunc:       INT_T ID OPEN_P QUEUE_T ID COMMA EVENT_T ID CLOSE_P OPEN_B dropMultStmt CLOSE_B
-                                                        {helper = createNode($2.symbol, $11, NULL);
-                                                        $$ = createNode("dropDecl", helper, NULL);}
+                                                        {children.push_back($11);
+                                                        struct Node * helper = createNode($2.symbol, children);
+                                                        children.push_back(helper);
+                                                        $$ = createNode("dropDecl", children);}
                 ;
 
 enquFunc:       BOOL_T ENQUEUE OPEN_P EVENT_T ID CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {helper = createNode($2.symbol, $8, NULL);
-                                                        $$ = createNode("enqueueDecl", helper, NULL);}
+                                                        {children.push_back($8);
+                                                        struct Node * helper = createNode($2.symbol, children);
+                                                        children.push_back(helper);
+                                                        $$ = createNode("enqueueDecl", children);}
                 ;
 
 nextEvent:      EVENT_T NEXT_EVENT OPEN_P CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {helper = createNode($2.symbol, $6, NULL);
-                                                        $$ = createNode("nextEventDecl", helper, NULL);}
+                                                        {children.push_back($6);
+                                                        struct Node * helper = createNode($2.symbol, children);
+                                                        children.push_back(helper);
+                                                        $$ = createNode("nextEventDecl", children);}
                 ;
 
-dropMultStmt:   dropMultStmt dropStmt                   {helper = createNode("", $2, NULL);
-                                                        $$ = createNode("", $1, helper);}
+dropMultStmt:   dropMultStmt dropStmt                   {children.push_back($1);
+                                                        children.push_back($2);
+                                                        $$ = createNode("", children);}
                 | dropStmt                              {$$ = $1;}
                 ;
 
@@ -168,8 +198,9 @@ dropStmt:       dropCondition                           {$$ = $1;}
                 | varDecl SEMIC                         {$$ = $1;}
                 ;
 
-comMultStmt:    comMultStmt commonStmt                  {helper = createNode("", $2, NULL);
-                                                        $$ = createNode("", $1, helper);}
+comMultStmt:    comMultStmt commonStmt                  {children.push_back($1);
+                                                        children.push_back($2);
+                                                        $$ = createNode("", children);}
                 | commonStmt                            {$$ = $1;}
                 ;
 
@@ -181,46 +212,74 @@ commonStmt:     comCondition                            {$$ = $1;}
                 ;
 
 dropCondition:   IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B
-                                                        {helper = createNode("ifStmts", $6, NULL);
-                                                        helper2 = createNode("ifArg", $3, helper);
-                                                        $$ = createNode("if", helper2, NULL);}
+                                                        {children.push_back($6);
+                                                        struct Node * helper = createNode("ifStmts", children);
+                                                        children.push_back($3);
+                                                        struct Node * helper2 = createNode("ifArg", children);
+                                                        children.push_back(helper);
+                                                        children.push_back(helper2);
+                                                        $$ = createNode("if", children);}
                 | IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B ELSE OPEN_B dropMultStmt CLOSE_B
-                                                        {helper = createNode("elseStmts", $10, NULL);
-                                                        helper2 = createNode("ifStmts", $6, helper);
-                                                        helper3 = createNode("ifArg", $3, helper2);
-                                                        $$ = createNode("ifelse", helper3, NULL);}
+                                                        {children.push_back($10);
+                                                        struct Node * helper = createNode("elseStmts", children);
+                                                        children.push_back($6);
+                                                        struct Node * helper2 = createNode("ifStmts", children);
+                                                        children.push_back($3);
+                                                        struct Node * helper3 = createNode("ifArg", children);
+                                                        children.push_back(helper);
+                                                        children.push_back(helper2);
+                                                        children.push_back(helper3);
+                                                        $$ = createNode("ifelse", children);}
                 ;
 
 comCondition:   IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {helper = createNode("ifStmts", $6, NULL);
-                                                        helper2 = createNode("ifArg", $3, helper);
-                                                        $$ = createNode("if", helper2, NULL);}
+                                                        {children.push_back($6);
+                                                        struct Node * helper = createNode("ifStmts", children);
+                                                        children.push_back($3);
+                                                        struct Node * helper2 = createNode("ifArg", children);
+                                                        children.push_back(helper);
+                                                        children.push_back(helper2);
+                                                        $$ = createNode("if", children);}
 
                 | IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B ELSE OPEN_B comMultStmt CLOSE_B
-                                                        {helper = createNode("elseStmts", $10, NULL);
-                                                        helper2 = createNode("ifStmts", $6, helper);
-                                                        helper3 = createNode("ifArg", $3, helper2);
-                                                        $$ = createNode("ifelse", helper3, NULL);}
+                                                        {children.push_back($10);
+                                                        struct Node * helper = createNode("elseStmts", children);
+                                                        children.push_back($6);
+                                                        struct Node * helper2 = createNode("ifStmts", children);
+                                                        children.push_back($3);
+                                                        struct Node * helper3 = createNode("ifArg", children);
+                                                        children.push_back(helper);
+                                                        children.push_back(helper2);
+                                                        children.push_back(helper3);
+                                                        $$ = createNode("ifelse", children);}
                 ;
 
 dropLoop:       FOREACH ID IN ID OPEN_B dropMultStmt CLOSE_B
-                                                        {helper = createNode("loopStmts", $6, NULL);
-                                                        helper2 = createNode($4.symbol, NULL, NULL);
-                                                        helper3 = createNode($2.symbol, NULL, helper2);
-                                                        helper = createNode("loopArgs", helper3, helper);
-                                                        $$ = createNode("foreach", helper, NULL);}
+                                                        {children.push_back($6);
+                                                        struct Node * helper = createNode("loopStmts", children);
+                                                        struct Node * helper2 = createNode($2.symbol, emptyVector);
+                                                        struct Node * helper3 = createNode($4.symbol, emptyVector);
+                                                        children.push_back(helper2);
+                                                        children.push_back(helper3);
+                                                        struct Node * helper4 = createNode("loopArgs", children);
+                                                        children.push_back(helper4);
+                                                        children.push_back(helper);
+                                                        $$ = createNode("foreach", children);}
                 ;
 
 comLoop:        FOR OPEN_P loopArgs CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {helper = createNode("loopStmts", $6, NULL);
-                                                        $3->next = helper;
-                                                        $$ = createNode("for", $3, NULL);}
+                                                        {children.push_back($6);
+                                                        struct Node * helper = createNode("loopStmts", children);
+                                                        children.push_back($3);
+                                                        children.push_back(helper);
+                                                        $$ = createNode("for", children);}
                 ;
 
 loopArgs:       firstArgument SEMIC argument SEMIC argument 
-                                                        {$3->next = $5;
-                                                        $1->next = $3;
-                                                        $$ = createNode("loopArgs", $1, NULL);}
+                                                        {children.push_back($1);
+                                                        children.push_back($3);
+                                                        children.push_back($5);
+                                                        $$ = createNode("loopArgs", children);}
                 ;
 
 firstArgument:  varDecl                                 {$$ = $1;}
@@ -232,64 +291,81 @@ argument:       attribution                             {$$ = $1;}
                 | /* empty */                           {$$ = NULL;}
                 ;
 
-return:         RETURN attribution                      {$$ = createNode($1.symbol, $2, NULL);}
+return:         RETURN attribution                      {children.push_back($2);
+                                                        $$ = createNode($1.symbol, children);}
                 ;
 
 varDecl:        INT_T ID                                {$$ = NULL;}
-                | INT_T ID ATTRIB_OP attribution        {helper = createNode($2.symbol, NULL, $4);
-                                                        $$ = createNode($3.symbol, helper, NULL);}
+                | INT_T ID ATTRIB_OP attribution        {struct Node * helper = createNode($2.symbol, emptyVector);
+                                                        children.push_back(helper);
+                                                        children.push_back($4);
+                                                        $$ = createNode($2.symbol, children);}
                 ;
 
-attribution:    ID ATTRIB_OP logicalOr                  {helper = createNode($1.symbol, NULL, $3);
-                                                        $$ = createNode($2.symbol, helper, NULL);}
+attribution:    ID ATTRIB_OP logicalOr                  {struct Node * helper = createNode($1.symbol, emptyVector);
+                                                        children.push_back(helper);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
                 | logicalOr                             {$$ = $1;}
                 ;
 
-logicalOr:      logicalOr LOGIC_OR_OP logicalAnd        {$1->next = $3;
-                                                        $$ = createNode($2.symbol, $1, NULL);}
+logicalOr:      logicalOr LOGIC_OR_OP logicalAnd        {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
                 | logicalAnd                            {$$ = $1;}
                 ;
 
-logicalAnd:     logicalAnd LOGIC_AND_OP compareExp      {$1->next = $3;
-                                                        $$ = createNode($2.symbol, $1, NULL);}
+logicalAnd:     logicalAnd LOGIC_AND_OP compareExp      {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
                 | compareExp                            {$$ = $1;}
                 ;
 
-compareExp:     compareExp RELAT_LOW_OP relationExp     {$1->next = $3;
-                                                        $$ = createNode($2.symbol, $1, NULL);}
+compareExp:     compareExp RELAT_LOW_OP relationExp     {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
                 | relationExp                           {$$ = $1;}
                 ;
 
-relationExp:    relationExp GREATER_OP lowMathExp       {$1->next = $3;
-                                                        $$ = createNode($2.symbol, $1, NULL);}
-                | relationExp LESSER_OP lowMathExp      {$1->next = $3;
-                                                        $$ = createNode($2.symbol, $1, NULL);}
-                | relationExp RELAT_HIGH_OP lowMathExp  {$1->next = $3;
-                                                        $$ = createNode($2.symbol, $1, NULL);}
+relationExp:    relationExp GREATER_OP lowMathExp       {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
+                | relationExp LESSER_OP lowMathExp      {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
+                | relationExp RELAT_HIGH_OP lowMathExp  {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
                 | lowMathExp                            {$$ = $1;}
                 ;
 
-lowMathExp:     lowMathExp MATH_ADD_OP highMathExp      {$1->next = $3;
-                                                        $$ = createNode($2.symbol, $1, NULL);}
-                | lowMathExp MATH_SUB_OP highMathExp    {$1->next = $3;
-                                                        $$ = createNode($2.symbol, $1, NULL);}
+lowMathExp:     lowMathExp MATH_ADD_OP highMathExp      {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
+                | lowMathExp MATH_SUB_OP highMathExp    {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
                 | highMathExp                           {$$ = $1;}
                 ;
 
-highMathExp:    highMathExp MATH_HIGH_OP unaryExp       {$1->next = $3;
-                                                        $$ = createNode($2.symbol, $1, NULL);}
+highMathExp:    highMathExp MATH_HIGH_OP unaryExp       {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
                 | unaryExp                              {$$ = $1;}
                 ;
 
 
-unaryExp:       LOGIC_NOT_OP unaryExp                   {$$ = createNode($1.symbol, $2, NULL);}
-                | MATH_SUB_OP unaryExp                  {$$ = createNode($1.symbol, $2, NULL);}
-                | TYPE OPEN_P unaryExp CLOSE_P          {$$ = createNode($1.symbol, $3, NULL);}
+unaryExp:       LOGIC_NOT_OP unaryExp                   {children.push_back($2);
+                                                        $$ = createNode($1.symbol, children);}
+                | MATH_SUB_OP unaryExp                  {children.push_back($2);
+                                                        $$ = createNode($1.symbol, children);}
+                | TYPE OPEN_P unaryExp CLOSE_P          {children.push_back($3);
+                                                        $$ = createNode($1.symbol, children);}
                 | element                               {$$ = $1;}
                 ;
 
-element:        ID                                      {$$ = createNode($1.symbol, NULL, NULL);}
-                | CONST_INT                             {$$ = createNode($1.symbol, NULL, NULL);}
+element:        ID                                      {$$ = createNode($1.symbol, emptyVector);}
+                | CONST_INT                             {$$ = createNode($1.symbol, emptyVector);}
                 | OPEN_P attribution CLOSE_P            {$$ = $2;}
                 ;
 
