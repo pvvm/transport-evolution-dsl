@@ -37,6 +37,7 @@ scheduler_t schedul_1 {
 dispatch_table_t table = {
     ACK -> {ACKProcessor, TimeProcessor};
     Time -> {TimeProcessor, TestProcessor};
+    Test -> {IDKProcessor, Ximbala, OI};
 };
 
 processor_t ACKProcessor(event_t e) {

@@ -2,7 +2,6 @@
 %define lr.type canonical-lr
 
 %{
-#include <stdio.h>
 #include "list_tree.hpp"
 
 extern int yylex(void);
@@ -25,7 +24,6 @@ vector<struct Node*> emptyVector;
 
 %union {
     struct token token;
-    //struct ListNode* node;
     struct Node* node;
 }
 
@@ -67,9 +65,9 @@ declarations:   scheduler dispatcher processorMult stateRecord
                 ;
 
 dispatcher:     DISPATCH_T_T ID ATTRIB_OP OPEN_B dispMult CLOSE_B SEMIC
-                                                        {children.push_back($5);
-                                                        struct Node * helper = createNode($2.symbol, children);
-                                                        children.push_back(helper);
+                                                        {children = removeBlankNodes($5);
+                                                        //struct Node * helper = createNode($2.symbol, children);
+                                                        //children.push_back(helper);
                                                         $$ = createNode("dispatcherDecl", children);}
                 ;
 
@@ -80,13 +78,13 @@ dispMult:       dispMult dispDecl                       {children.push_back($1);
                 ;
 
 dispDecl:       ID ARROW OPEN_B processorIds CLOSE_B SEMIC
-                                                        {children.push_back($4);
+                                                        {children = treeToVector($4);
                                                         $$ = createNode($1.symbol, children);}
                 ;
 
 // This too
-processorIds:   ID COMMA processorIds                   {children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+processorIds:   ID COMMA processorIds                   {children = removeBlankNodes($3);
+                                                        $$ = createNode($1.symbol, children);}
                 | ID                                    {$$ = createNode($1.symbol, emptyVector);}
                 ;
 
@@ -98,30 +96,29 @@ processorMult:  processorMult processorDecl             {children.push_back($1);
 
 processorDecl:  PROCESSOR_T ID OPEN_P EVENT_T ID CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {children.push_back($8);
-                                                        struct Node * helper = createNode($2.symbol, children);
-                                                        children.push_back(helper);
+                                                        //struct Node * helper = createNode($2.symbol, children);
+                                                        //children.push_back(helper);
                                                         $$ = createNode("processorDecl", children);}
                 ;
 
 stateRecord:    STATE_R_T ID OPEN_B srVariables CLOSE_B
-                                                        {children.push_back($4);
-                                                        struct Node * helper = createNode($2.symbol, children);
-                                                        children.push_back(helper);
+                                                        {children = treeToVector($4);
+                                                        //struct Node * helper = createNode($2.symbol, children);
+                                                        //children.push_back(helper);
                                                         $$ = createNode("stateRecordDecl", children);}
                 ;
 
-// This one too
 srVariables:    INT_T ID SEMIC srVariables              {children.push_back($4);
                                                         $$ = createNode($2.symbol, children);}
                 | INT_T ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
                 ;
 
 scheduler:      SCHEDULER_T ID OPEN_B queues enquFunc nextEvent CLOSE_B
-                                                        {children.push_back($4);
+                                                        {children = removeBlankNodes($4);
                                                         children.push_back($5);
                                                         children.push_back($6);
-                                                        struct Node * helper = createNode($2.symbol, children);
-                                                        children.push_back(helper);
+                                                        //struct Node * helper = createNode($2.symbol, children);
+                                                        //children.push_back(helper);
                                                         $$ = createNode("schedulerDecl", children);}
                 ;
 
@@ -131,10 +128,11 @@ queues:         queues queueAndDrop                     {children.push_back($1);
                 | queueAndDrop                          {$$ = $1;}
                 ;
 
+// FIX HERE
 queueAndDrop:   qTypeDecl dropDecl queueDecl            {children.push_back($1);
                                                         children.push_back($2);
                                                         children.push_back($3);
-                                                        $$ = createNode("", children);}
+                                                        $$ = createNode("teste", children);}
                 ;
 
 qTypeDecl:      queueType                               {$$ = $1;}
@@ -142,9 +140,9 @@ qTypeDecl:      queueType                               {$$ = $1;}
                 ;
 
 queueType:      EVENT_T ID OPEN_B queueTypeDecl CLOSE_B SEMIC
-                                                        {children.push_back($4);
-                                                        struct Node * helper = createNode($2.symbol, children);
-                                                        children.push_back(helper);
+                                                        {children = treeToVector($4);
+                                                        //struct Node * helper = createNode($2.symbol, children);
+                                                        //children.push_back(helper);
                                                         $$ = createNode("eventDecl", children);}
                 ;
 
@@ -165,23 +163,23 @@ dropDecl:       dropFunc                                {$$ = $1;}
                 ;
 
 dropFunc:       INT_T ID OPEN_P QUEUE_T ID COMMA EVENT_T ID CLOSE_P OPEN_B dropMultStmt CLOSE_B
-                                                        {children.push_back($11);
-                                                        struct Node * helper = createNode($2.symbol, children);
-                                                        children.push_back(helper);
+                                                        {children = removeBlankNodes($11);
+                                                        //struct Node * helper = createNode($2.symbol, children);
+                                                        //children.push_back(helper);
                                                         $$ = createNode("dropDecl", children);}
                 ;
 
 enquFunc:       BOOL_T ENQUEUE OPEN_P EVENT_T ID CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {children.push_back($8);
-                                                        struct Node * helper = createNode($2.symbol, children);
-                                                        children.push_back(helper);
+                                                        {children = removeBlankNodes($8);
+                                                        //struct Node * helper = createNode($2.symbol, children);
+                                                        //children.push_back(helper);
                                                         $$ = createNode("enqueueDecl", children);}
                 ;
 
 nextEvent:      EVENT_T NEXT_EVENT OPEN_P CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {children.push_back($6);
-                                                        struct Node * helper = createNode($2.symbol, children);
-                                                        children.push_back(helper);
+                                                        {children = removeBlankNodes($6);
+                                                        //struct Node * helper = createNode($2.symbol, children);
+                                                        //children.push_back(helper);
                                                         $$ = createNode("nextEventDecl", children);}
                 ;
 
@@ -299,7 +297,7 @@ varDecl:        INT_T ID                                {$$ = NULL;}
                 | INT_T ID ATTRIB_OP attribution        {struct Node * helper = createNode($2.symbol, emptyVector);
                                                         children.push_back(helper);
                                                         children.push_back($4);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($3.symbol, children);}
                 ;
 
 attribution:    ID ATTRIB_OP logicalOr                  {struct Node * helper = createNode($1.symbol, emptyVector);
@@ -372,7 +370,8 @@ element:        ID                                      {$$ = createNode($1.symb
 %%
 
 void yyerror(const char *error){
-    printf("Error: %s\nLine: %d\nColumn: %d", error, yylval.token.line, yylval.token.column);
+    cout << "Error:" << error << "\nLine:" << yylval.token.line
+    << "\nColumn:" << yylval.token.column << endl;
 }
 
 int main(int arc, char **argv) {

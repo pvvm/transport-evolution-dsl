@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <fstream>
 
 using namespace std;
 
@@ -13,7 +14,13 @@ typedef struct Node {
 }node;
 
 struct Node* createNode(string, vector<struct Node*> &);
+
+vector<struct Node*> treeToVector(struct Node*);
+
+vector<struct Node*> removeBlankNodes(struct Node*);
+
 void printTree(struct Node*, int);
-struct Node* freeTree(struct Node*);
+
+void freeTree(struct Node*);
 
 #endif

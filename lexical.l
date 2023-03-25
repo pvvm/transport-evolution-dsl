@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "syntax.tab.h"
+#include "syntax.tab.hpp"
 
 int line = 1;
 int column = 1;
