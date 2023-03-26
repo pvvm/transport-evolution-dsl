@@ -6,7 +6,7 @@ scheduler_t schedul_1 {
     };
 
     int ack_drop(queue_t ack_queue, event_t ACK) {
-        int a = 1 + 2;
+        int a = b = 1 + 2;
         int b = a && 1;
         foreach event in ack_queue {
             a = a + b * (b + 1);
@@ -19,6 +19,38 @@ scheduler_t schedul_1 {
     }
     
     queue_t <ACK> ack_queue(1, 3, 10, ack_drop);
+
+    event_t TIME {
+        int tempo;
+        int segundos;
+    };
+
+    int time_drop(queue_t time_queue, event_t TIME) {
+        if(time_queue > 50 && sei_la == 30) {
+            b = 20;
+            foreach elemento in time_queue {
+                elemento = 4;
+            }
+        }
+    }
+    
+    queue_t <TIME> time_queue(1, 3, 10, time_drop);
+
+    event_t TIME {
+        int tempo;
+        int segundos;
+    };
+
+    int time_drop(queue_t time_queue, event_t TIME) {
+        if(time_queue > 50 && sei_la == 30) {
+            b = 20;
+            foreach elemento in time_queue {
+                elemento = 4;
+            }
+        }
+    }
+    
+    queue_t <TIME> time_queue(1, 3, 10, time_drop);
 
     bool enqueue(event_t e) {
         int b = 2;

@@ -28,21 +28,14 @@ vector<struct Node*> removeBlankNodes(struct Node* node) {
     if(node->symbol != "") {
         resultVector.push_back(node);
         return resultVector;
-    } else  {
-        resultVector = removeBlankNodes(node->children[0]);
-        resultVector.push_back(node->children[1]);
-
-        delete node;
-
-        return resultVector;
     }
+    resultVector = removeBlankNodes(node->children[0]);
+    for(int i = 1; i < node->children.size(); i++)
+        resultVector.push_back(node->children[i]);
 
-    /*if(node->children[1]->symbol != "") {
-        resultVector = removeBlankNodes(node->children[1]);
-    }
-    resultVector.push_back(node->children[0]);
+    delete node;
 
-    return resultVector;*/
+    return resultVector;
 }
 
 void printTree(struct Node* node, int printSpacing) {
