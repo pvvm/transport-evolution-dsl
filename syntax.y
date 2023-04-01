@@ -27,22 +27,22 @@ vector<struct Node*> emptyVector;
     struct Node* node;
 }
 
-%token <token> INT_T BOOL_T EVENT_T QUEUE_T SCHEDULER_T DISPATCH_T_T
-%token <token> PROCESSOR_T STATE_R_T CONST_INT MATH_HIGH_OP MATH_ADD_OP
+%token <token> INT_T BOOL_T EVENT_T QUEUE_T SCHEDULER_T DISPATCH_T_T LIST_T SEGMENT_T
+%token <token> PROC_OUT_T STRUCT_T CONTEXT_T CONST_INT MATH_HIGH_OP MATH_ADD_OP
 %token <token> MATH_SUB_OP LOGIC_OR_OP LOGIC_AND_OP LOGIC_NOT_OP GREATER_OP
 %token <token> LESSER_OP RELAT_HIGH_OP RELAT_LOW_OP ATTRIB_OP IF ELSE FOR FOREACH
-%token <token> IN RETURN TYPE NEXT_EVENT ENQUEUE ID OPEN_B CLOSE_B OPEN_P CLOSE_P
-%token <token> COMMA SEMIC ARROW
+%token <token> IN RETURN TYPE LENGTH ADD NEXT_EVENT ENQUEUE ID OPEN_B CLOSE_B OPEN_S CLOSE_S
+%token <token> OPEN_P CLOSE_P DOT COMMA SEMIC ARROW
 
 %type <node> program declarations dispatcher dispMult dispDecl
-%type <node> processorIds processorMult processorDecl stateRecord
-%type <node> srVariables scheduler queues queueAndDrop qTypeDecl
-%type <node> queueType queueTypeDecl queueDecl dropDecl dropFunc
+%type <node> processorIds processorMult processorOrType processorType procTypeDecl
+%type <node> processorDecl context contVariables scheduler queues queueAndDrop
+%type <node> queueType queueTypeDecl queueDecl dropDecl
 %type <node> enquFunc nextEvent dropMultStmt dropStmt comMultStmt
 %type <node> commonStmt dropCondition comCondition dropLoop comLoop loopArgs
 %type <node> firstArgument argument return varDecl
 %type <node> attribution logicalOr logicalAnd compareExp relationExp
-%type <node> lowMathExp highMathExp unaryExp element
+%type <node> lowMathExp highMathExp unaryExp element idVariations squareBrackets
 
 %start program
 
@@ -56,10 +56,10 @@ program:        declarations                            {children = $1->children
                 | /* empty */                           {$$ = NULL;}
                 ;
 
-declarations:   scheduler dispatcher processorMult stateRecord
-                                                        {children.push_back($1);
-                                                        children.push_back($2);
-                                                        children.push_back($3);
+declarations:   scheduler dispatcher processorMult context
+                                                        {children = removeBlankNodes($3);
+                                                        children.insert(children.begin(), $1);
+                                                        children.insert(children.begin(), $2);
                                                         children.push_back($4);
                                                         $$ = createNode("", children);}
                 ;
@@ -87,27 +87,48 @@ processorIds:   ID COMMA processorIds                   {children = removeBlankN
                 | ID                                    {$$ = createNode($1.symbol, emptyVector);}
                 ;
 
-processorMult:  processorMult processorDecl             {children.push_back($1);
-                                                        children.push_back($2);
+processorMult:  processorMult processorOrType           {children = removeBlankNodes($2);
+                                                        children.insert(children.begin(), $1);
                                                         $$ = createNode("", children);}
+                | processorOrType                       {$$ = $1;}
+                ;
+
+processorOrType: processorType                          {$$ = $1;}
                 | processorDecl                         {$$ = $1;}
                 ;
 
-processorDecl:  PROCESSOR_T ID OPEN_P EVENT_T ID CLOSE_P OPEN_B comMultStmt CLOSE_B
+processorType:  STRUCT_T PROC_OUT_T OPEN_B procTypeDecl CLOSE_B
+                                                        {children = treeToVector($4);
+                                                        $$ = createNode("structDecl", children);}
+                ;
+
+procTypeDecl:   LIST_T LESSER_OP EVENT_T GREATER_OP ID SEMIC procTypeDecl
+                                                        {children.push_back($7);
+                                                        $$ = createNode($5.symbol, children);}
+                | LIST_T LESSER_OP EVENT_T GREATER_OP ID SEMIC
+                                                        {$$ = createNode($5.symbol, emptyVector);}
+                | LIST_T LESSER_OP SEGMENT_T GREATER_OP ID SEMIC procTypeDecl
+                                                        {children.push_back($7);
+                                                        $$ = createNode($5.symbol, children);}
+                | LIST_T LESSER_OP SEGMENT_T GREATER_OP ID SEMIC
+                                                        {$$ = createNode($5.symbol, emptyVector);}
+                ;
+
+processorDecl:  PROC_OUT_T ID OPEN_P ID ID CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {children = removeBlankNodes($8);
                                                         //struct Node * helper = createNode($2.symbol, children);
                                                         //children.push_back(helper);
                                                         $$ = createNode("processorDecl", children);}
                 ;
 
-stateRecord:    STATE_R_T ID OPEN_B srVariables CLOSE_B
+context:        CONTEXT_T ID OPEN_B contVariables CLOSE_B
                                                         {children = treeToVector($4);
                                                         //struct Node * helper = createNode($2.symbol, children);
                                                         //children.push_back(helper);
-                                                        $$ = createNode("stateRecordDecl", children);}
+                                                        $$ = createNode("contextDecl", children);}
                 ;
 
-srVariables:    INT_T ID SEMIC srVariables              {children.push_back($4);
+contVariables:  INT_T ID SEMIC contVariables              {children.push_back($4);
                                                         $$ = createNode($2.symbol, children);}
                 | INT_T ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
                 ;
@@ -121,22 +142,18 @@ scheduler:      SCHEDULER_T ID OPEN_B queues enquFunc nextEvent CLOSE_B
                                                         $$ = createNode("schedulerDecl", children);}
                 ;
 
-queues:         queues queueAndDrop                     {
-                                                        children = removeBlankNodes($2);
+queues:         queues queueAndDrop                     {children = removeBlankNodes($2);
                                                         children.insert(children.begin(), $1);
                                                         $$ = createNode("", children);}
                 | queueAndDrop                          {$$ = $1;}
                 ;
 
-// FIX HERE
-queueAndDrop:   qTypeDecl dropDecl queueDecl            {children.push_back($1);
-                                                        children.push_back($2);
-                                                        children.push_back($3);
+queueAndDrop:   queueType                               {children.push_back($1);
                                                         $$ = createNode("", children);}
-                ;
-
-qTypeDecl:      queueType                               {$$ = $1;}
-                | /* empty */                           {$$ = NULL;}
+                | dropDecl                              {children.push_back($1);
+                                                        $$ = createNode("", children);}
+                | queueDecl                             {children.push_back($1);
+                                                        $$ = createNode("", children);}
                 ;
 
 queueType:      EVENT_T ID OPEN_B queueTypeDecl CLOSE_B SEMIC
@@ -151,17 +168,13 @@ queueTypeDecl:  INT_T ID SEMIC queueTypeDecl            {children.push_back($4);
                 | INT_T ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
                 ;
 
-queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID OPEN_P CONST_INT COMMA CONST_INT COMMA CONST_INT COMMA ID CLOSE_P SEMIC
+queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID OPEN_P CONST_INT COMMA CONST_INT COMMA ID CLOSE_P SEMIC
                                                         {struct Node * helper = createNode($5.symbol, emptyVector);
                                                         children.push_back(helper);
                                                         $$ = createNode("queueDecl", children);}
                 ;
 
-dropDecl:       dropFunc                                {$$ = $1;}
-                | /* empty */                           {$$ = NULL;}
-                ;
-
-dropFunc:       INT_T ID OPEN_P QUEUE_T ID COMMA EVENT_T ID CLOSE_P OPEN_B dropMultStmt CLOSE_B
+dropDecl:       INT_T ID OPEN_P QUEUE_T ID COMMA ID ID CLOSE_P OPEN_B dropMultStmt CLOSE_B
                                                         {children = removeBlankNodes($11);
                                                         //struct Node * helper = createNode($2.symbol, children);
                                                         //children.push_back(helper);
@@ -299,8 +312,7 @@ varDecl:        INT_T ID                                {$$ = NULL;}
                                                         $$ = createNode($3.symbol, children);}
                 ;
 
-attribution:    ID ATTRIB_OP attribution                {struct Node * helper = createNode($1.symbol, emptyVector);
-                                                        children.push_back(helper);
+attribution:    idVariations ATTRIB_OP attribution      {children.push_back($1);
                                                         children.push_back($3);
                                                         $$ = createNode($2.symbol, children);}
                 | logicalOr                             {$$ = $1;}
@@ -358,14 +370,36 @@ unaryExp:       LOGIC_NOT_OP unaryExp                   {children.push_back($2);
                                                         $$ = createNode($1.symbol, children);}
                 | TYPE OPEN_P unaryExp CLOSE_P          {children.push_back($3);
                                                         $$ = createNode($1.symbol, children);}
+                | LENGTH OPEN_P unaryExp CLOSE_P        {children.push_back($3);
+                                                        $$ = createNode($1.symbol, children);}
                 | element                               {$$ = $1;}
                 ;
 
-element:        ID                                      {$$ = createNode($1.symbol, emptyVector);}
+element:        idVariations                            {$$ = $1;}
                 | CONST_INT                             {$$ = createNode($1.symbol, emptyVector);}
                 | OPEN_P attribution CLOSE_P            {$$ = $2;}
                 ;
 
+idVariations:   idVariations DOT squareBrackets         {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
+                | idVariations DOT ADD OPEN_P ID CLOSE_P
+                                                        {struct Node * helper = createNode($5.symbol, emptyVector);
+                                                        children.push_back(helper);
+                                                        struct Node * helper2 = createNode($3.symbol, children);
+                                                        children.push_back($1);
+                                                        children.push_back(helper2);
+                                                        $$ = createNode($2.symbol, children);}
+
+                | squareBrackets                        {$$ = $1;}
+                ;
+
+squareBrackets: squareBrackets OPEN_S attribution CLOSE_S
+                                                        {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode("index", children);}
+                | ID                                    {$$ = createNode($1.symbol, emptyVector);}
+                ;
 %%
 
 void yyerror(const char *error){

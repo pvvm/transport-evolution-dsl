@@ -20,8 +20,9 @@ EVENT_T         (event_t)
 QUEUE_T         (queue_t)
 SCHEDULER_T     (scheduler_t)
 DISPATCH_T_T    (dispatch_table_t)
-PROCESSOR_T     (processor_t)
-STATE_R_T       (state_record_t)
+CONTEXT_T       (context_t)
+SEGMENT_T       (segment_t)
+PROC_OUT_T      (proc_out_t)
 
 CONST_INT       [0-9]+
 
@@ -60,11 +61,21 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 {DISPATCH_T_T}  {tokenCreator();
                 return DISPATCH_T_T;}
 
-{PROCESSOR_T}   {tokenCreator();
-                return PROCESSOR_T;}
+"struct"        {tokenCreator();
+                return STRUCT_T;}
 
-{STATE_R_T}     {tokenCreator();
-                return STATE_R_T;}
+"list"          {tokenCreator();
+                return LIST_T;}
+
+{SEGMENT_T}     {tokenCreator();
+                return SEGMENT_T;}
+
+
+{CONTEXT_T}     {tokenCreator();
+                return CONTEXT_T;}
+
+{PROC_OUT_T}    {tokenCreator();
+                return PROC_OUT_T;}
 
     /* Integer constant */
 {CONST_INT}     {tokenCreator();
@@ -134,6 +145,12 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "type"          {tokenCreator();
                 return TYPE;}
 
+"len"           {tokenCreator();
+                return LENGTH;}
+
+"add"           {tokenCreator();
+                return ADD;}
+
 "next_event"    {tokenCreator();
                 return NEXT_EVENT;}
 
@@ -149,11 +166,20 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "}"             {tokenCreator();
                 return CLOSE_B;}
 
+"."             {tokenCreator();
+                return DOT;}
+
 "("             {tokenCreator();
                 return OPEN_P;}
 
 ")"             {tokenCreator();
                 return CLOSE_P;}
+
+"["             {tokenCreator();
+                return OPEN_S;}
+
+"]"             {tokenCreator();
+                return CLOSE_S;}
 
 ","             {tokenCreator();
                 return COMMA;}
@@ -167,6 +193,8 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 \n              {++line;    column = 1;}
 
 [\t ]           column += yyleng;
+
+"//".*          {}
 
 .               {printf("Lexical error: %s Line: %d Column: %d\n", yytext, line, column);
                 column += yyleng;}
