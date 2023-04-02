@@ -64,6 +64,9 @@ declarations:   scheduler dispatcher processorMult context
                                                         $$ = createNode("", children);}
                 ;
 
+// DISPATCHER START
+
+    // dispatch_table_t id = { ... };
 dispatcher:     DISPATCH_T_T ID ATTRIB_OP OPEN_B dispMult CLOSE_B SEMIC
                                                         {children = removeBlankNodes($5);
                                                         //struct Node * helper = createNode($2.symbol, children);
@@ -77,10 +80,15 @@ dispMult:       dispMult dispDecl                       {children.push_back($1);
                 | dispDecl                              {$$ = $1;}
                 ;
 
+    // id -> {...};
 dispDecl:       ID ARROW OPEN_B processorIds CLOSE_B SEMIC
                                                         {children = treeToVector($4);
                                                         $$ = createNode($1.symbol, children);}
                 ;
+
+// DISPATCHER END
+
+// PROCESSOR START
 
 processorIds:   ID COMMA processorIds                   {children = removeBlankNodes($3);
                                                         $$ = createNode($1.symbol, children);}
@@ -97,11 +105,13 @@ processorOrType: processorType                          {$$ = $1;}
                 | processorDecl                         {$$ = $1;}
                 ;
 
+    // struct proc_out_t { ... }
 processorType:  STRUCT_T PROC_OUT_T OPEN_B procTypeDecl CLOSE_B
                                                         {children = treeToVector($4);
                                                         $$ = createNode("structDecl", children);}
                 ;
 
+    // list<event_t> id;
 procTypeDecl:   LIST_T LESSER_OP EVENT_T GREATER_OP ID SEMIC procTypeDecl
                                                         {children.push_back($7);
                                                         $$ = createNode($5.symbol, children);}
@@ -114,6 +124,7 @@ procTypeDecl:   LIST_T LESSER_OP EVENT_T GREATER_OP ID SEMIC procTypeDecl
                                                         {$$ = createNode($5.symbol, emptyVector);}
                 ;
 
+    // proc_out_t id (id id) { ... }
 processorDecl:  PROC_OUT_T ID OPEN_P ID ID CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {children = removeBlankNodes($8);
                                                         //struct Node * helper = createNode($2.symbol, children);
@@ -121,6 +132,11 @@ processorDecl:  PROC_OUT_T ID OPEN_P ID ID CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         $$ = createNode("processorDecl", children);}
                 ;
 
+// PROCESSOR END
+
+// CONTEXT START
+
+    // context_t id { ... }
 context:        CONTEXT_T ID OPEN_B contVariables CLOSE_B
                                                         {children = treeToVector($4);
                                                         //struct Node * helper = createNode($2.symbol, children);
@@ -128,11 +144,17 @@ context:        CONTEXT_T ID OPEN_B contVariables CLOSE_B
                                                         $$ = createNode("contextDecl", children);}
                 ;
 
+    // int id;
 contVariables:  INT_T ID SEMIC contVariables              {children.push_back($4);
                                                         $$ = createNode($2.symbol, children);}
                 | INT_T ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
                 ;
 
+// CONTEXT END
+
+// SCHEDULER START
+
+    // scheduler_t id { ... }
 scheduler:      SCHEDULER_T ID OPEN_B queues enquFunc nextEvent CLOSE_B
                                                         {children = removeBlankNodes($4);
                                                         children.push_back($5);
@@ -141,6 +163,8 @@ scheduler:      SCHEDULER_T ID OPEN_B queues enquFunc nextEvent CLOSE_B
                                                         //children.push_back(helper);
                                                         $$ = createNode("schedulerDecl", children);}
                 ;
+
+// QUEUE START
 
 queues:         queues queueAndDrop                     {children = removeBlankNodes($2);
                                                         children.insert(children.begin(), $1);
@@ -156,6 +180,7 @@ queueAndDrop:   queueType                               {children.push_back($1);
                                                         $$ = createNode("", children);}
                 ;
 
+    // event_t id { ... };
 queueType:      EVENT_T ID OPEN_B queueTypeDecl CLOSE_B SEMIC
                                                         {children = treeToVector($4);
                                                         //struct Node * helper = createNode($2.symbol, children);
@@ -163,17 +188,20 @@ queueType:      EVENT_T ID OPEN_B queueTypeDecl CLOSE_B SEMIC
                                                         $$ = createNode("eventDecl", children);}
                 ;
 
+    // int id;
 queueTypeDecl:  INT_T ID SEMIC queueTypeDecl            {children.push_back($4);
                                                         $$ = createNode($2.symbol, children);}
                 | INT_T ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
                 ;
 
+    // queue_t<id> id (const, const, id); 
 queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID OPEN_P CONST_INT COMMA CONST_INT COMMA ID CLOSE_P SEMIC
                                                         {struct Node * helper = createNode($5.symbol, emptyVector);
                                                         children.push_back(helper);
                                                         $$ = createNode("queueDecl", children);}
                 ;
 
+    // int id (queue_t id, id id) { ... }
 dropDecl:       INT_T ID OPEN_P QUEUE_T ID COMMA ID ID CLOSE_P OPEN_B dropMultStmt CLOSE_B
                                                         {children = removeBlankNodes($11);
                                                         //struct Node * helper = createNode($2.symbol, children);
@@ -181,6 +209,11 @@ dropDecl:       INT_T ID OPEN_P QUEUE_T ID COMMA ID ID CLOSE_P OPEN_B dropMultSt
                                                         $$ = createNode("dropDecl", children);}
                 ;
 
+// QUEUES END
+
+// SCHEDULLER DEFAULT FUNCTIONS START
+
+    // bool enqueue (event_t id) { ... }
 enquFunc:       BOOL_T ENQUEUE OPEN_P EVENT_T ID CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {children = removeBlankNodes($8);
                                                         //struct Node * helper = createNode($2.symbol, children);
@@ -188,12 +221,19 @@ enquFunc:       BOOL_T ENQUEUE OPEN_P EVENT_T ID CLOSE_P OPEN_B comMultStmt CLOS
                                                         $$ = createNode("enqueueDecl", children);}
                 ;
 
+    // event_t next_event () { ... }
 nextEvent:      EVENT_T NEXT_EVENT OPEN_P CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {children = removeBlankNodes($6);
                                                         //struct Node * helper = createNode($2.symbol, children);
                                                         //children.push_back(helper);
                                                         $$ = createNode("nextEventDecl", children);}
                 ;
+
+// SCHEDULLER DEFAULT FUNCTIONS END
+
+// SCHEDULLER END
+
+// COMMON GRAMMAR START
 
 dropMultStmt:   dropMultStmt dropStmt                   {children.push_back($1);
                                                         children.push_back($2);
@@ -221,6 +261,8 @@ commonStmt:     comCondition                            {$$ = $1;}
                 | varDecl SEMIC                         {$$ = $1;}
                 ;
 
+    // if ( ... ) { ... }
+    // if ( ... ) { ... } else { ... }
 dropCondition:   IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B
                                                         {children.push_back($3);
                                                         struct Node * helper = createNode("ifArg", children);
@@ -242,6 +284,8 @@ dropCondition:   IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B
                                                         $$ = createNode("ifelse", children);}
                 ;
 
+    // if ( ... ) { ... }
+    // if ( ... ) { ... } else { ... }
 comCondition:   IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {children.push_back($3);
                                                         struct Node * helper = createNode("ifArg", children);
@@ -264,6 +308,7 @@ comCondition:   IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         $$ = createNode("ifelse", children);}
                 ;
 
+    // foreach id in id { ... }
 dropLoop:       FOREACH ID IN ID OPEN_B dropMultStmt CLOSE_B
                                                         {children = removeBlankNodes($6);
                                                         struct Node * helper = createNode("loopStmts", children);
@@ -277,6 +322,7 @@ dropLoop:       FOREACH ID IN ID OPEN_B dropMultStmt CLOSE_B
                                                         $$ = createNode("foreach", children);}
                 ;
 
+    // for ( ... ) { ... }
 comLoop:        FOR OPEN_P loopArgs CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {children = removeBlankNodes($6);
                                                         struct Node * helper = createNode("loopStmts", children);
@@ -400,6 +446,8 @@ squareBrackets: squareBrackets OPEN_S attribution CLOSE_S
                                                         $$ = createNode("index", children);}
                 | ID                                    {$$ = createNode($1.symbol, emptyVector);}
                 ;
+
+// COMMON GRAMMAR END
 %%
 
 void yyerror(const char *error){

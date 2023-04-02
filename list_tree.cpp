@@ -1,5 +1,11 @@
 #include "list_tree.hpp"
 
+/*
+Allocate memory for a node and stores new values in it
+Returns: pointer to new node
+symbol: symbol of the node
+child: address of children vector
+*/
 struct Node* createNode(string symbol, vector<struct Node*>& child) {
     Node* node = new Node;
     node->symbol = symbol;
@@ -10,6 +16,12 @@ struct Node* createNode(string symbol, vector<struct Node*>& child) {
     return node;
 }
 
+/*
+Turns parent and child nodes into siblings in a vector
+Uses recursion to access child node
+Returns: vector containing nodes as siblings
+node: parent node
+*/
 vector<struct Node*> treeToVector(struct Node* node) {
     vector<struct Node*> resultVector;
 
@@ -22,6 +34,14 @@ vector<struct Node*> treeToVector(struct Node* node) {
     return resultVector;
 }
 
+/*
+Unnecessary nodes with blank symbol ("") are removed
+and their children nodes are grouped in a vector
+Uses recursion to access child node
+
+Returns: vector containing nodes as siblings
+node: parent node
+*/
 vector<struct Node*> removeBlankNodes(struct Node* node) {
     vector<struct Node*> resultVector;
 
@@ -38,6 +58,13 @@ vector<struct Node*> removeBlankNodes(struct Node* node) {
     return resultVector;
 }
 
+/*
+Prints abstract syntax tree
+Uses recursion to access child node
+
+node: node which will be printed
+printSpacing: number of spaces necessary to represent the depth of a node
+*/
 void printTree(struct Node* node, int printSpacing) {
     for(int i = 0; i < printSpacing; i++)
         cout << "|    ";
@@ -49,6 +76,12 @@ void printTree(struct Node* node, int printSpacing) {
     }
 }
 
+/*
+Frees memory allocated to tree
+Uses recursion to access child node
+
+node: node which will freed
+*/
 void freeTree(struct Node* node) {
     for(struct Node* child : node->children) {
         freeTree(child);
