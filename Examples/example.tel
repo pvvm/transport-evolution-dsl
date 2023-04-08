@@ -1,31 +1,74 @@
+header TCPheader {
+    int srcport;
+    int dstport;
+    int seq;
+    int ack;
+}
+
 scheduler_t schedul_1 {
 
     event_t ACK {
         int a;
         int b;
-    };
+    }
 
-    int ack_drop(queue_t ack_queue, event_t ACK) {
-        int a = 1 + 2;
+    int ack_drop(queue_t ack_queue, ACK event_ack) {
+        int a = b[1].teste[3] = 1 + 2;
         int b = a && 1;
         foreach event in ack_queue {
-            a = a + b * (b + 1);
+            a = a.sdos.sdsd + b * (b + 1);
             if(!a >= b) {
-                a = 0;
+                a[0][1] = 0;
             } else {
                 b = 1;
             }
         }
     }
     
-    queue_t <ACK> ack_queue(1, 3, 10, ack_drop);
+    queue_t <ACK> ack_queue(3, 10, ack_drop);
 
+    event_t TIME {
+        int tempo;
+        int segundos;
+    }
     bool enqueue(event_t e) {
         int b = 2;
-        return a;
+        return len(a);
     }
 
-    event_t next_event() {
+    int time_drop(queue_t time_queue, TIME time_event) {
+        if(time_queue > 50 && sei_la == 30) {
+            b = 20;
+            foreach elemento in time_queue {
+                elemento = 4;
+            }
+        }
+    }
+    
+    queue_t <TIME> time_queue(3, 10, time_drop);
+
+    event_t TIME {
+        int tempo;
+        int segundos;
+    }
+
+    int time_drop(queue_t time_queue, TIME time_event) {
+        if(time_queue > 50 && sei_la == 30) {
+            b = 20;
+            foreach elemento in time_queue {
+                elemento = 4;
+            }
+        }
+    }
+    // testando
+    queue_t <TIME> time_queue(3, 10, time_drop);
+
+    bool enqueue_ack(event_t e) {
+        int b = 2;
+        return len(a);
+    }
+
+    event_t next_event(queue_t testando, queue_t testando_denovo) {
         int a = 1;
         int b = 0;
         if(a == b || b != a) {
@@ -34,18 +77,43 @@ scheduler_t schedul_1 {
     }
 }
 
-dispatch_table_t table = {
+dispatch_table_t table {
     ACK -> {ACKProcessor, TimeProcessor};
     Time -> {TimeProcessor, TestProcessor};
-};
+    Test -> {IDKProcessor, Test, Testing3};
+}
 
-processor_t ACKProcessor(event_t e) {
+struct proc_out_t {
+    list<event_t> event_list;
+    list<pkt_t> segment_list;
+}
+
+proc_out_t ACKProcessor(ACK ack_event) {
     for(int i = 0; i < 10; i = i + 1) {
         i = a + 2 - 3 < 3 == 5;
     }
 }
 
-state_record_t test {
+proc_out_t ACKProcessor(ACK ack_event) {
+    for(int i = 0; i < 10; i = i + 1) {
+        i = a + 2 - 3 < 3 == 5;
+    }
+    float a;
+    float a = 31.942 - 3 + 1.11101 - .3 + time() - time() && 3 - 3.1;
+    i.sei_la[3].add(oi) = 50;
+    P.add_data(ctx->data[1:10]);
+    TCPheader th;
+    pkt_t P = new_pkt();
+    P.add_hdr(th);
+    P.get_hdr<TCPheader>();
+}
+struct proc_out_t {
+    list<event_t> event_list;
+    list<pkt_t> segment_list;
+}
+
+context_t test {
     int a;
     int b;
+    stream something;
 }
