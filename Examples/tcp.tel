@@ -1,123 +1,161 @@
-scheduler_t scheduler {
+// tcp header
 
-    event_t APP {
-        int connection_id;
-        int advertized_window;
-        int seq_number;
-    };
+sched myScheduler {
 
-    // is parameter event_t necessary?
+    event SEND {
+        int time;
+        int flow_id;
+    }
 
-    int app_drop(queue_t app_queue, APP new_event) {
-        int index = -1;
+    int send_drop(queue_t send_queue, SEND new_event) {
+        int most_recent = 0;
+        int index = 0;
         int counter = 0;
-        int smallest_size = 0;
 
-
-        foreach app_event in app_queue {
-            if(app_event.advertized_window < smallest_size) {
-                smallest_size = app_event.advertized_window;
+        foreach event in send_queue {
+            if(event.time > most_recent) {
+                most_recent = event.time;
                 index = counter;
             }
             counter = counter + 1;
         }
-        
-        // some sort of index for queues?
-        // would the new event be a parameter?
 
-        if(index != -1) {
-            app_queue[index] = new_event;
+        return index;
+    }
+
+    queue_t <SEND> send_queue(10, 20, send_drop);
+
+
+    event ACK {
+        int flow_id;
+        int acknum;
+    }
+
+    int ack_drop(queue_t ack_queue, ACK new_event) {
+        int index = len(ack_queue) - 1;
+
+        return index;
+    }
+
+    queue_t <ACK> ack_queue(5, 15, ack_drop);
+
+    event TIMER {
+        int flow_id;
+    }
+
+
+    int timer_drop(queue_t ack_queue, TIMER new_event) {
+        int index = len(ack_queue) - 1;
+
+        return index;
+    }
+
+    queue_t <TIMER> timer_queue(3, 10, timer_drop);
+// each queue's event with its own enqueue
+
+    // maybe add new_event and enqueue events?
+    bool enqueue(event new_event) {
+
+        if (type(new_event) == SEND) {
+            send_queue.push(new_event);
+            return 1;
         }
-
-        //what would we return?
-
-        return 0;
-    }
-    
-    // is minimum length necessary?
-
-    queue_t <APP> app_queue(1, 3, 10, app_drop);
-
-
-    event_t ACK {
-        int connection_id;
-        int advertized_window;
-        int ack_number;
-        int seq_number;
-    };
-
-    int ack_drop(queue_t ack_queue, event_t ACK) {
-
-        // add an operation to return the size of a queue?
-        len(ack_queue);
-
-        int index = 0;
-        foreach ack_event in ack_queue:
-            index = index + 1;
-
+        if (type(new_event) == ACK) {
+            ack_queue.push(new_event);
+            return 1;
+        }
+        if (type(new_event) == TIMER) {
+            timer_queue.push(new_event);
+            return 1;
+        }
         return 0;
     }
 
-    queue_t <ACK> ack_queue(2, 3, 10, ack_drop);
-
-
-    // why event_t?
-    // what would go in this function? is there any necessity to change enqueue?
-    bool enqueue(event_t e) {
-    }
-
-    // maybe we could let the programmer declare the priority here
-    // or some sort of function
+    // add queues as parameters?
     event_t next_event() {
-        if(len(app_queue) > app_queue.maxLen / 2) {
-            return type(app_queue);
-        } else {
-            return type(ack_queue);
+        if(len(timer_queue) > len(ack_queue) / 2) {
+            return TIMER;
         }
+        if (len(send_queue) < len(ack_queue)) {
+            return ACK;
+        }
+        return TIMER;
     }
 }
 
-dispatch_table_t table = {
-    APP -> {CongestionProcessor, SendProcessor};
+dispatch table {
+    SEND -> {SendProcessor};
     ACK -> {ACKProcessor};
-};
+    TIMER -> {TIMERProcessor};
+}
 
-processor_t CongestionProcessor(event_t event) {
-    // some sort of way to access the context? dictionary? connection_id like a list?
-    int diff = context.last_byte_sent - context.last_byte_acked;
+// change to packet_t
 
-    int effect_window = context.advertized_window - diff;
+struct proc_out_t {
+    list<event_t> event_list;
+    list<segment_t> segment_list;
+}
 
-    if(effect_window > 0) {
-        // proceeds to SendProcessor
+proc_out_t SendProcessor(SEND event, myContext context) {
+    proc_out_t output;
+
+    // why 128?
+    for(;
+    (context.m_Nxt < context.m_Una + context.m_Nxt) && (context.m_Nxt < 128);
+    context.m_Nxt = context.m_Nxt + context.m_segmentsize) {
         
-    } else {
-        // what should it do? drop or push back to events queue?
+
+        // and now time?
+
     }
+    output.event_list.add(SEND)
+	output.segment_list.add();
+
+    return output;
 }
 
-processor_t SendProcessor(event_t event) {
-    // some special instruction to send?
+
+proc_out_t ACKProcessor(ACK event, myContext context) {
+    
+    // isResend is a map. How to represent it in our language?
+    
+    // some variables are float
+
+    output.event_list.add(ACK);
+	output.segment_list.add();
+
+    return output;
 }
 
-processor_t ACKProcessor(event_t event) {
-    int compare_ack = context.last_seq_sent + context.last_segm_length;
+proc_out_t TIMERProcessor(TIMER event, myContext context) {
 
+    if (context.m_Una < 128) {
+        if (context.m_Wnd / 2 >= 1) {
+            context.m_Wnd = context.m_Wnd / 2;
+        } else {
+            context.m_Wnd = 1;
+        }
 
-    if(compare_ack != event.ack_number) {
-        // retransmit? push new event?
-    } else {
-        // update informations in context?
     }
+
+    output.event_list.add(TIMER);
+	output.segment_list.add();
+
+    return output;
 }
 
-// is context shared among events of the same type?
-// or one context for each connection? -> connection_id could be an index?
-context_t context {
-    int connection_id;
-    int advertized_window;
-    int last_seq_sent;
-    int last_segm_length;
-    int last_byte_sent;
-    int last_byte_acked;
+
+context myContext {
+    int m_Una;
+    int m_Nxt;
+    int m_start;
+    int m_Wnd;
+    int m_Iss;
+    int Smss;
+    int m_dupSeq;
+    int m_dupAmount;
+    int m_cnwd;
+    int m_ssthresh;
+    int m_segmentsize;
+    int m_dupThreshold;
 }

@@ -1,9 +1,16 @@
+header TCPheader {
+    int srcport;
+    int dstport;
+    int seq;
+    int ack;
+}
+
 scheduler_t schedul_1 {
 
     event_t ACK {
         int a;
         int b;
-    };
+    }
 
     int ack_drop(queue_t ack_queue, ACK event_ack) {
         int a = b[1].teste[3] = 1 + 2;
@@ -23,7 +30,7 @@ scheduler_t schedul_1 {
     event_t TIME {
         int tempo;
         int segundos;
-    };
+    }
 
     int time_drop(queue_t time_queue, TIME time_event) {
         if(time_queue > 50 && sei_la == 30) {
@@ -39,7 +46,7 @@ scheduler_t schedul_1 {
     event_t TIME {
         int tempo;
         int segundos;
-    };
+    }
 
     int time_drop(queue_t time_queue, TIME time_event) {
         if(time_queue > 50 && sei_la == 30) {
@@ -66,15 +73,15 @@ scheduler_t schedul_1 {
     }
 }
 
-dispatch_table_t table = {
+dispatch_table_t table {
     ACK -> {ACKProcessor, TimeProcessor};
     Time -> {TimeProcessor, TestProcessor};
     Test -> {IDKProcessor, Test, Testing3};
-};
+}
 
 struct proc_out_t {
     list<event_t> event_list;
-    list<segment_t> segment_list;
+    list<packet_t> segment_list;
 }
 
 proc_out_t ACKProcessor(ACK ack_event) {
@@ -88,14 +95,16 @@ proc_out_t ACKProcessor(ACK ack_event) {
         i = a + 2 - 3 < 3 == 5;
     }
     i.sei_la[3].add(oi) = 50;
+    float a;
+    float a = 31.942 - 3 + 1.11101 - .3;
 }
 struct proc_out_t {
     list<event_t> event_list;
-    list<segment_t> segment_list;
-    list<event_t> event_list;
+    list<packet_t> segment_list;
 }
 
 context_t test {
     int a;
     int b;
+    stream something;
 }

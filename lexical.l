@@ -15,16 +15,19 @@ void tokenCreator();
 %option noyywrap
 
 INT_T           (int)
+FLOAT_T         (float)
 BOOL_T          (bool)
+STREAM_T        (stream)
 EVENT_T         (event_t)
 QUEUE_T         (queue_t)
 SCHEDULER_T     (scheduler_t)
 DISPATCH_T_T    (dispatch_table_t)
 CONTEXT_T       (context_t)
-SEGMENT_T       (segment_t)
+PACKET_T        (packet_t)
 PROC_OUT_T      (proc_out_t)
 
 CONST_INT       [0-9]+
+CONST_FLOAT     ([0-9]*"."[0-9]+)
 
 MATH_HIGH_OP    [\*/]
 MATH_ADD_OP     [\+]
@@ -45,10 +48,16 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 {INT_T}         {tokenCreator();
                 return INT_T;}
 
+{FLOAT_T}       {tokenCreator();
+                return FLOAT_T;}
+
 {BOOL_T}        {tokenCreator();
                 return BOOL_T;}
 
     /* New types */
+{STREAM_T}      {tokenCreator();
+                return STREAM_T;}
+
 {EVENT_T}       {tokenCreator();
                 return EVENT_T;}
 
@@ -61,14 +70,17 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 {DISPATCH_T_T}  {tokenCreator();
                 return DISPATCH_T_T;}
 
+"header"        {tokenCreator();
+                return HEADER;}
+
 "struct"        {tokenCreator();
                 return STRUCT_T;}
 
 "list"          {tokenCreator();
                 return LIST_T;}
 
-{SEGMENT_T}     {tokenCreator();
-                return SEGMENT_T;}
+{PACKET_T}      {tokenCreator();
+                return PACKET_T;}
 
 
 {CONTEXT_T}     {tokenCreator();
@@ -80,6 +92,10 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
     /* Integer constant */
 {CONST_INT}     {tokenCreator();
                 return CONST_INT;}
+
+    /* Float constant */
+{CONST_FLOAT}     {tokenCreator();
+                return CONST_FLOAT;}
 
     /* High precedence mathematical operators (* /) */
 {MATH_HIGH_OP}  {tokenCreator();

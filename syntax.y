@@ -27,20 +27,20 @@ vector<struct Node*> emptyVector;
     struct Node* node;
 }
 
-%token <token> INT_T BOOL_T EVENT_T QUEUE_T SCHEDULER_T DISPATCH_T_T LIST_T SEGMENT_T
-%token <token> PROC_OUT_T STRUCT_T CONTEXT_T CONST_INT MATH_HIGH_OP MATH_ADD_OP
+%token <token> INT_T FLOAT_T BOOL_T STREAM_T EVENT_T QUEUE_T SCHEDULER_T DISPATCH_T_T LIST_T PACKET_T
+%token <token> PROC_OUT_T STRUCT_T CONTEXT_T HEADER CONST_INT CONST_FLOAT MATH_HIGH_OP MATH_ADD_OP
 %token <token> MATH_SUB_OP LOGIC_OR_OP LOGIC_AND_OP LOGIC_NOT_OP GREATER_OP
 %token <token> LESSER_OP RELAT_HIGH_OP RELAT_LOW_OP ATTRIB_OP IF ELSE FOR FOREACH
 %token <token> IN RETURN TYPE LENGTH ADD NEXT_EVENT ENQUEUE ID OPEN_B CLOSE_B OPEN_S CLOSE_S
 %token <token> OPEN_P CLOSE_P DOT COMMA SEMIC ARROW
 
-%type <node> program declarations dispatcher dispMult dispDecl
+%type <node> program declarations headerDecl dispatcher dispMult dispDecl
 %type <node> processorIds processorMult processorOrType processorType procTypeDecl
 %type <node> processorDecl context contVariables scheduler queues queueAndDrop
 %type <node> queueType queueTypeDecl queueDecl dropDecl
 %type <node> enquFunc nextEvent dropMultStmt dropStmt comMultStmt
 %type <node> commonStmt dropCondition comCondition dropLoop comLoop loopArgs
-%type <node> firstArgument argument return varDecl
+%type <node> firstArgument argument return varDecl types
 %type <node> attribution logicalOr logicalAnd compareExp relationExp
 %type <node> lowMathExp highMathExp unaryExp element idVariations squareBrackets
 
@@ -56,19 +56,29 @@ program:        declarations                            {children = $1->children
                 | /* empty */                           {$$ = NULL;}
                 ;
 
-declarations:   scheduler dispatcher processorMult context
-                                                        {children = removeBlankNodes($3);
-                                                        children.insert(children.begin(), $1);
+declarations:   headerDecl scheduler dispatcher processorMult context
+                                                        {children = removeBlankNodes($4);
+                                                        children.insert(children.begin(), $3);
                                                         children.insert(children.begin(), $2);
-                                                        children.push_back($4);
+                                                        children.insert(children.begin(), $1);
+                                                        children.push_back($5);
                                                         $$ = createNode("", children);}
                 ;
+
+// HEADER START
+
+headerDecl:     HEADER ID OPEN_B contVariables CLOSE_B
+                                                        {children = treeToVector($4);
+                                                        $$ = createNode("headerDecl", children);}
+                ;
+
+// HEADER END
 
 // DISPATCHER START
 
     // dispatch_table_t id = { ... };
-dispatcher:     DISPATCH_T_T ID ATTRIB_OP OPEN_B dispMult CLOSE_B SEMIC
-                                                        {children = removeBlankNodes($5);
+dispatcher:     DISPATCH_T_T ID OPEN_B dispMult CLOSE_B
+                                                        {children = removeBlankNodes($4);
                                                         //struct Node * helper = createNode($2.symbol, children);
                                                         //children.push_back(helper);
                                                         $$ = createNode("dispatcherDecl", children);}
@@ -117,18 +127,16 @@ procTypeDecl:   LIST_T LESSER_OP EVENT_T GREATER_OP ID SEMIC procTypeDecl
                                                         $$ = createNode($5.symbol, children);}
                 | LIST_T LESSER_OP EVENT_T GREATER_OP ID SEMIC
                                                         {$$ = createNode($5.symbol, emptyVector);}
-                | LIST_T LESSER_OP SEGMENT_T GREATER_OP ID SEMIC procTypeDecl
+                | LIST_T LESSER_OP PACKET_T GREATER_OP ID SEMIC procTypeDecl
                                                         {children.push_back($7);
                                                         $$ = createNode($5.symbol, children);}
-                | LIST_T LESSER_OP SEGMENT_T GREATER_OP ID SEMIC
+                | LIST_T LESSER_OP PACKET_T GREATER_OP ID SEMIC
                                                         {$$ = createNode($5.symbol, emptyVector);}
                 ;
 
     // proc_out_t id (id id) { ... }
 processorDecl:  PROC_OUT_T ID OPEN_P ID ID CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {children = removeBlankNodes($8);
-                                                        //struct Node * helper = createNode($2.symbol, children);
-                                                        //children.push_back(helper);
                                                         $$ = createNode("processorDecl", children);}
                 ;
 
@@ -139,15 +147,13 @@ processorDecl:  PROC_OUT_T ID OPEN_P ID ID CLOSE_P OPEN_B comMultStmt CLOSE_B
     // context_t id { ... }
 context:        CONTEXT_T ID OPEN_B contVariables CLOSE_B
                                                         {children = treeToVector($4);
-                                                        //struct Node * helper = createNode($2.symbol, children);
-                                                        //children.push_back(helper);
                                                         $$ = createNode("contextDecl", children);}
                 ;
 
     // int id;
-contVariables:  INT_T ID SEMIC contVariables              {children.push_back($4);
+contVariables:  types ID SEMIC contVariables            {children.push_back($4);
                                                         $$ = createNode($2.symbol, children);}
-                | INT_T ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
+                | types ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
                 ;
 
 // CONTEXT END
@@ -181,7 +187,7 @@ queueAndDrop:   queueType                               {children.push_back($1);
                 ;
 
     // event_t id { ... };
-queueType:      EVENT_T ID OPEN_B queueTypeDecl CLOSE_B SEMIC
+queueType:      EVENT_T ID OPEN_B queueTypeDecl CLOSE_B
                                                         {children = treeToVector($4);
                                                         //struct Node * helper = createNode($2.symbol, children);
                                                         //children.push_back(helper);
@@ -189,9 +195,9 @@ queueType:      EVENT_T ID OPEN_B queueTypeDecl CLOSE_B SEMIC
                 ;
 
     // int id;
-queueTypeDecl:  INT_T ID SEMIC queueTypeDecl            {children.push_back($4);
+queueTypeDecl:  types ID SEMIC queueTypeDecl            {children.push_back($4);
                                                         $$ = createNode($2.symbol, children);}
-                | INT_T ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
+                | types ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
                 ;
 
     // queue_t<id> id (const, const, id); 
@@ -351,11 +357,16 @@ return:         RETURN attribution                      {children.push_back($2);
                                                         $$ = createNode($1.symbol, children);}
                 ;
 
-varDecl:        INT_T ID                                {$$ = NULL;}
-                | INT_T ID ATTRIB_OP attribution        {struct Node * helper = createNode($2.symbol, emptyVector);
+varDecl:        types ID                                {$$ = createNode($2.symbol, emptyVector);}
+                | types ID ATTRIB_OP attribution        {struct Node * helper = createNode($2.symbol, emptyVector);
                                                         children.push_back(helper);
                                                         children.push_back($4);
                                                         $$ = createNode($3.symbol, children);}
+                ;
+
+types:          INT_T                                   {$$ = NULL;}
+                | FLOAT_T                               {$$ = NULL;}
+                | STREAM_T                              {$$ = NULL;}
                 ;
 
 attribution:    idVariations ATTRIB_OP attribution      {children.push_back($1);
@@ -423,10 +434,14 @@ unaryExp:       LOGIC_NOT_OP unaryExp                   {children.push_back($2);
 
 element:        idVariations                            {$$ = $1;}
                 | CONST_INT                             {$$ = createNode($1.symbol, emptyVector);}
+                | CONST_FLOAT                           {$$ = createNode($1.symbol, emptyVector);}
                 | OPEN_P attribution CLOSE_P            {$$ = $2;}
                 ;
 
 idVariations:   idVariations DOT squareBrackets         {children.push_back($1);
+                                                        children.push_back($3);
+                                                        $$ = createNode($2.symbol, children);}
+                | idVariations ARROW squareBrackets       {children.push_back($1);
                                                         children.push_back($3);
                                                         $$ = createNode($2.symbol, children);}
                 | idVariations DOT ADD OPEN_P ID CLOSE_P
