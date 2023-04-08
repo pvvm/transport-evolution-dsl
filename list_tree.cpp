@@ -65,13 +65,16 @@ Uses recursion to access child node
 node: node which will be printed
 printSpacing: number of spaces necessary to represent the depth of a node
 */
-void printTree(struct Node* node, int printSpacing) {
-    for(int i = 0; i < printSpacing; i++)
+void printTree(struct Node* node, int printSpacing, fstream& file) {
+    for(int i = 0; i < printSpacing; i++) {
         cout << "|    ";
+        file << "|    ";
+    }
     cout << "|-> " << node->symbol << endl;
+    file << "|-> " << node->symbol << endl;
 
     for(struct Node* child : node->children) {
-        printTree(child, ++printSpacing);
+        printTree(child, ++printSpacing, file);
         --printSpacing;
     }
 }

@@ -55,7 +55,7 @@ Uses recursion to access child node
 struct Node*: node which will be printed
 int: number of spaces necessary to represent the depth of a node
 */
-void printTree(struct Node*, int);
+void printTree(struct Node*, int, fstream&);
 
 /*
 Frees memory allocated to tree

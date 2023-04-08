@@ -18,11 +18,12 @@ INT_T           (int)
 FLOAT_T         (float)
 BOOL_T          (bool)
 STREAM_T        (stream)
+EVENT           (event)
 EVENT_T         (event_t)
 QUEUE_T         (queue_t)
-SCHEDULER_T     (scheduler_t)
-DISPATCH_T_T    (dispatch_table_t)
-CONTEXT_T       (context_t)
+SCHEDULER_T     (sched)
+DISPATCH        (dispatch)
+CONTEXT_T       (context)
 PACKET_T        (pkt_t)
 PROC_OUT_T      (proc_out_t)
 
@@ -62,14 +63,17 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 {EVENT_T}       {tokenCreator();
                 return EVENT_T;}
 
+{EVENT}         {tokenCreator();
+                return EVENT;}
+
 {QUEUE_T}       {tokenCreator();
                 return QUEUE_T;}
 
 {SCHEDULER_T}   {tokenCreator();
                 return SCHEDULER_T;}
 
-{DISPATCH_T_T}  {tokenCreator();
-                return DISPATCH_T_T;}
+{DISPATCH}      {tokenCreator();
+                return DISPATCH;}
 
 "header"        {tokenCreator();
                 return HEADER;}
@@ -144,6 +148,12 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 {ATTRIB_OP}     {tokenCreator();
                 return ATTRIB_OP;}
 
+"true"          {tokenCreator();
+                return TRUE;}
+
+"false"         {tokenCreator();
+                return FALSE;}
+
 "if"            {tokenCreator();
                 return IF;}
 
@@ -185,6 +195,9 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 
 "add"           {tokenCreator();
                 return ADD;}
+
+"push"          {tokenCreator();
+                return PUSH;}
 
 "next_event"    {tokenCreator();
                 return NEXT_EVENT;}
