@@ -31,6 +31,10 @@ scheduler_t schedul_1 {
         int tempo;
         int segundos;
     }
+    bool enqueue(event_t e) {
+        int b = 2;
+        return len(a);
+    }
 
     int time_drop(queue_t time_queue, TIME time_event) {
         if(time_queue > 50 && sei_la == 30) {
@@ -59,12 +63,12 @@ scheduler_t schedul_1 {
     // testando
     queue_t <TIME> time_queue(3, 10, time_drop);
 
-    bool enqueue(event_t e) {
+    bool enqueue_ack(event_t e) {
         int b = 2;
         return len(a);
     }
 
-    event_t next_event() {
+    event_t next_event(queue_t testando, queue_t testando_denovo) {
         int a = 1;
         int b = 0;
         if(a == b || b != a) {
@@ -81,7 +85,7 @@ dispatch_table_t table {
 
 struct proc_out_t {
     list<event_t> event_list;
-    list<packet_t> segment_list;
+    list<pkt_t> segment_list;
 }
 
 proc_out_t ACKProcessor(ACK ack_event) {
@@ -94,13 +98,18 @@ proc_out_t ACKProcessor(ACK ack_event) {
     for(int i = 0; i < 10; i = i + 1) {
         i = a + 2 - 3 < 3 == 5;
     }
-    i.sei_la[3].add(oi) = 50;
     float a;
-    float a = 31.942 - 3 + 1.11101 - .3;
+    float a = 31.942 - 3 + 1.11101 - .3 + time() - time() && 3 - 3.1;
+    i.sei_la[3].add(oi) = 50;
+    P.add_data(ctx->data[1:10]);
+    TCPheader th;
+    pkt_t P = new_pkt();
+    P.add_hdr(th);
+    P.get_hdr<TCPheader>();
 }
 struct proc_out_t {
     list<event_t> event_list;
-    list<packet_t> segment_list;
+    list<pkt_t> segment_list;
 }
 
 context_t test {

@@ -23,7 +23,7 @@ QUEUE_T         (queue_t)
 SCHEDULER_T     (scheduler_t)
 DISPATCH_T_T    (dispatch_table_t)
 CONTEXT_T       (context_t)
-PACKET_T        (packet_t)
+PACKET_T        (pkt_t)
 PROC_OUT_T      (proc_out_t)
 
 CONST_INT       [0-9]+
@@ -37,6 +37,7 @@ LOGIC_AND_OP    (&&)
 LOGIC_NOT_OP    (!)
 RELAT_HIGH_OP   (<=|>=)
 RELAT_LOW_OP    (==|!=)
+SLICE_OP        (:)
 ATTRIB_OP       (=)
 
 ID              [a-zA-Z][_a-zA-Z0-9]*
@@ -136,6 +137,9 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 {RELAT_LOW_OP}  {tokenCreator();
                 return RELAT_LOW_OP;}
 
+{SLICE_OP}      {tokenCreator();
+                return SLICE_OP;}
+
     /* Attribution operator (=) */
 {ATTRIB_OP}     {tokenCreator();
                 return ATTRIB_OP;}
@@ -164,14 +168,26 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "len"           {tokenCreator();
                 return LENGTH;}
 
+"time"          {tokenCreator();
+                return TIME;}
+
+"new_pkt"       {tokenCreator();
+                return NEW_PKT;}
+
+"add_data"      {tokenCreator();
+                return ADD_DATA;}
+
+"add_hdr"       {tokenCreator();
+                return ADD_HDR;}
+
+"get_hdr"       {tokenCreator();
+                return GET_HDR;}
+
 "add"           {tokenCreator();
                 return ADD;}
 
 "next_event"    {tokenCreator();
                 return NEXT_EVENT;}
-
-"enqueue"       {tokenCreator();
-                return ENQUEUE;}
 
 {ID}            {tokenCreator();
                 return ID;}
