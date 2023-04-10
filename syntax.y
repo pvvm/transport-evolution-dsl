@@ -12,6 +12,10 @@ void yyerror(const char *);
 
 vector<struct Node*> children;
 vector<struct Node*> emptyVector;
+struct Node * helper;
+struct Node * helper2;
+struct Node * helper3;
+struct Node * helper4;
 %}
 
 %code requires {
@@ -31,7 +35,7 @@ vector<struct Node*> emptyVector;
 %token <token> PROC_OUT_T STRUCT_T CONTEXT_T HEADER CONST_INT CONST_FLOAT MATH_HIGH_OP MATH_ADD_OP TRUE FALSE
 %token <token> MATH_SUB_OP LOGIC_OR_OP LOGIC_AND_OP LOGIC_NOT_OP GREATER_OP LESSER_OP RELAT_HIGH_OP
 %token <token> RELAT_LOW_OP SLICE_OP ATTRIB_OP IF ELSE FOR FOREACH TIME IN RETURN TYPE LENGTH NEW_PKT
-%token <token> ADD_DATA ADD_HDR GET_HDR ADD NEXT_EVENT /*ENQUEUE*/ PUSH ID OPEN_B CLOSE_B OPEN_S CLOSE_S
+%token <token> ADD_DATA ADD_HDR GET_HDR ADD NEXT_EVENT ENQUEUE PUSH POP ID OPEN_B CLOSE_B OPEN_S CLOSE_S
 %token <token> OPEN_P CLOSE_P DOT COMMA SEMIC ARROW
 
 %type <node> program declarations headerDecl dispatcher dispMult dispDecl
@@ -81,8 +85,6 @@ headerDecl:     HEADER ID OPEN_B contVariables CLOSE_B
     // dispatch_table_t id = { ... };
 dispatcher:     DISPATCH ID OPEN_B dispMult CLOSE_B
                                                         {children = removeBlankNodes($4);
-                                                        //struct Node * helper = createNode($2.symbol, children);
-                                                        //children.push_back(helper);
                                                         $$ = createNode("dispatcherDecl", children);}
                 ;
 
@@ -124,10 +126,10 @@ processorType:  STRUCT_T PROC_OUT_T OPEN_B procTypeDecl CLOSE_B
                 ;
 
     // list<event> id;
-procTypeDecl:   LIST_T LESSER_OP EVENT GREATER_OP ID SEMIC procTypeDecl
+procTypeDecl:   LIST_T LESSER_OP EVENT_T GREATER_OP ID SEMIC procTypeDecl
                                                         {children.push_back($7);
                                                         $$ = createNode($5.symbol, children);}
-                | LIST_T LESSER_OP EVENT GREATER_OP ID SEMIC
+                | LIST_T LESSER_OP EVENT_T GREATER_OP ID SEMIC
                                                         {$$ = createNode($5.symbol, emptyVector);}
                 | LIST_T LESSER_OP PACKET_T GREATER_OP ID SEMIC procTypeDecl
                                                         {children.push_back($7);
@@ -166,8 +168,6 @@ contVariables:  types ID SEMIC contVariables            {children.push_back($4);
 scheduler:      SCHEDULER_T ID OPEN_B queues nextEvent CLOSE_B
                                                         {children = removeBlankNodes($4);
                                                         children.push_back($5);
-                                                        //struct Node * helper = createNode($2.symbol, children);
-                                                        //children.push_back(helper);
                                                         $$ = createNode("schedulerDecl", children);}
                 ;
 
@@ -191,8 +191,6 @@ queueAndDrop:   queueType                               {children.push_back($1);
     // event id { ... };
 queueType:      EVENT ID OPEN_B queueTypeDecl CLOSE_B
                                                         {children = treeToVector($4);
-                                                        //struct Node * helper = createNode($2.symbol, children);
-                                                        //children.push_back(helper);
                                                         $$ = createNode("eventDecl", children);}
                 ;
 
@@ -204,7 +202,7 @@ queueTypeDecl:  types ID SEMIC queueTypeDecl            {children.push_back($4);
 
     // queue_t<id> id (const, const, id); 
 queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID OPEN_P CONST_INT COMMA CONST_INT COMMA ID CLOSE_P SEMIC
-                                                        {struct Node * helper = createNode($5.symbol, emptyVector);
+                                                        {helper = createNode($5.symbol, emptyVector);
                                                         children.push_back(helper);
                                                         $$ = createNode("queueDecl", children);}
                 ;
@@ -212,8 +210,6 @@ queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID OPEN_P CONST_INT COMMA CONST_
     // int id (queue_t id, id id) { ... }
 dropDecl:       INT_T ID OPEN_P QUEUE_T ID COMMA ID ID CLOSE_P OPEN_B dropMultStmt CLOSE_B
                                                         {children = removeBlankNodes($11);
-                                                        //struct Node * helper = createNode($2.symbol, children);
-                                                        //children.push_back(helper);
                                                         $$ = createNode("dropDecl", children);}
                 ;
 
@@ -222,7 +218,7 @@ dropDecl:       INT_T ID OPEN_P QUEUE_T ID COMMA ID ID CLOSE_P OPEN_B dropMultSt
 // SCHEDULLER DEFAULT FUNCTIONS START
 
     // bool enqueue (event id) { ... }
-enquDecl:       BOOL_T ID /*ENQUEUE*/ OPEN_P EVENT ID CLOSE_P OPEN_B comMultStmt CLOSE_B
+enquDecl:       BOOL_T ENQUEUE OPEN_P EVENT ID CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {children = removeBlankNodes($8);
                                                         $$ = createNode("enqueueDecl", children);}
                 ;
@@ -273,19 +269,19 @@ commonStmt:     comCondition                            {$$ = $1;}
     // if ( ... ) { ... } else { ... }
 dropCondition:   IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B
                                                         {children.push_back($3);
-                                                        struct Node * helper = createNode("ifArg", children);
+                                                        helper = createNode("ifArg", children);
                                                         children = removeBlankNodes($6);
-                                                        struct Node * helper2 = createNode("ifStmts", children);
+                                                        helper2 = createNode("ifStmts", children);
                                                         children.push_back(helper);
                                                         children.push_back(helper2);
                                                         $$ = createNode("if", children);}
                 | IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B ELSE OPEN_B dropMultStmt CLOSE_B
                                                         {children.push_back($3);
-                                                        struct Node * helper = createNode("ifArg", children);
+                                                        helper = createNode("ifArg", children);
                                                         children = removeBlankNodes($6);
-                                                        struct Node * helper2 = createNode("ifStmts", children);
+                                                        helper2 = createNode("ifStmts", children);
                                                         children = removeBlankNodes($10);
-                                                        struct Node * helper3 = createNode("elseStmts", children);
+                                                        helper3 = createNode("elseStmts", children);
                                                         children.push_back(helper);
                                                         children.push_back(helper2);
                                                         children.push_back(helper3);
@@ -296,20 +292,20 @@ dropCondition:   IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B
     // if ( ... ) { ... } else { ... }
 comCondition:   IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {children.push_back($3);
-                                                        struct Node * helper = createNode("ifArg", children);
+                                                        helper = createNode("ifArg", children);
                                                         children = removeBlankNodes($6);
-                                                        struct Node * helper2 = createNode("ifStmts", children);
+                                                        helper2 = createNode("ifStmts", children);
                                                         children.push_back(helper);
                                                         children.push_back(helper2);
                                                         $$ = createNode("if", children);}
 
                 | IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B ELSE OPEN_B comMultStmt CLOSE_B
                                                         {children.push_back($3);
-                                                        struct Node * helper = createNode("ifArg", children);
+                                                        helper = createNode("ifArg", children);
                                                         children = removeBlankNodes($6);
-                                                        struct Node * helper2 = createNode("ifStmts", children);
+                                                        helper2 = createNode("ifStmts", children);
                                                         children = removeBlankNodes($10);
-                                                        struct Node * helper3 = createNode("elseStmts", children);
+                                                        helper3 = createNode("elseStmts", children);
                                                         children.push_back(helper);
                                                         children.push_back(helper2);
                                                         children.push_back(helper3);
@@ -319,12 +315,12 @@ comCondition:   IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B
     // foreach id in id { ... }
 dropLoop:       FOREACH ID IN ID OPEN_B dropMultStmt CLOSE_B
                                                         {children = removeBlankNodes($6);
-                                                        struct Node * helper = createNode("loopStmts", children);
-                                                        struct Node * helper2 = createNode($2.symbol, emptyVector);
-                                                        struct Node * helper3 = createNode($4.symbol, emptyVector);
+                                                        helper = createNode("loopStmts", children);
+                                                        helper2 = createNode($2.symbol, emptyVector);
+                                                        helper3 = createNode($4.symbol, emptyVector);
                                                         children.push_back(helper2);
                                                         children.push_back(helper3);
-                                                        struct Node * helper4 = createNode("loopArgs", children);
+                                                        helper4 = createNode("loopArgs", children);
                                                         children.push_back(helper4);
                                                         children.push_back(helper);
                                                         $$ = createNode("foreach", children);}
@@ -333,7 +329,7 @@ dropLoop:       FOREACH ID IN ID OPEN_B dropMultStmt CLOSE_B
     // for ( ... ) { ... }
 comLoop:        FOR OPEN_P loopArgs CLOSE_P OPEN_B comMultStmt CLOSE_B
                                                         {children = removeBlankNodes($6);
-                                                        struct Node * helper = createNode("loopStmts", children);
+                                                        helper = createNode("loopStmts", children);
                                                         children.push_back($3);
                                                         children.push_back(helper);
                                                         $$ = createNode("for", children);}
@@ -360,14 +356,14 @@ return:         RETURN attribution                      {children.push_back($2);
                 ;
 
 varDecl:        types ID                                {$$ = createNode($2.symbol, emptyVector);}
-                | types ID ATTRIB_OP attribution        {struct Node * helper = createNode($2.symbol, emptyVector);
+                | types ID ATTRIB_OP attribution        {helper = createNode($2.symbol, emptyVector);
                                                         children.push_back(helper);
                                                         children.push_back($4);
                                                         $$ = createNode($3.symbol, children);}
                 | PACKET_T ID ATTRIB_OP NEW_PKT OPEN_P CLOSE_P
-                                                        {struct Node * helper = createNode($2.symbol, emptyVector);
+                                                        {helper = createNode($2.symbol, emptyVector);
                                                         children.push_back(helper);
-                                                        struct Node * helper2 = createNode($4.symbol, emptyVector);
+                                                        helper2 = createNode($4.symbol, emptyVector);
                                                         children.push_back(helper2);
                                                         $$ = createNode($3.symbol, children);}
                 | PROC_OUT_T ID                         {$$ = createNode($2.symbol, emptyVector);}
@@ -438,8 +434,6 @@ unaryExp:       LOGIC_NOT_OP unaryExp                   {children.push_back($2);
                                                         $$ = createNode($1.symbol, children);}
                 | TYPE OPEN_P unaryExp CLOSE_P          {children.push_back($3);
                                                         $$ = createNode($1.symbol, children);}
-                | LENGTH OPEN_P unaryExp CLOSE_P        {children.push_back($3);
-                                                        $$ = createNode($1.symbol, children);}
                 | element                               {$$ = $1;}
                 ;
 
@@ -459,35 +453,44 @@ idVariations:   idVariations DOT squareBrackets         {children.push_back($1);
                                                         children.push_back($3);
                                                         $$ = createNode($2.symbol, children);}
                 | idVariations DOT ADD OPEN_P ID CLOSE_P
-                                                        {struct Node * helper = createNode($5.symbol, emptyVector);
+                                                        {helper = createNode($5.symbol, emptyVector);
                                                         children.push_back(helper);
-                                                        struct Node * helper2 = createNode($3.symbol, children);
+                                                        helper2 = createNode($3.symbol, children);
                                                         children.push_back($1);
                                                         children.push_back(helper2);
                                                         $$ = createNode($2.symbol, children);}
                 | idVariations DOT ADD_HDR OPEN_P ID CLOSE_P
-                                                        {struct Node * helper = createNode($5.symbol, emptyVector);
+                                                        {helper = createNode($5.symbol, emptyVector);
                                                         children.push_back(helper);
-                                                        struct Node * helper2 = createNode($3.symbol, children);
+                                                        helper2 = createNode($3.symbol, children);
                                                         children.push_back($1);
                                                         children.push_back(helper2);
                                                         $$ = createNode($2.symbol, children);}
                 | idVariations DOT GET_HDR LESSER_OP ID GREATER_OP OPEN_P CLOSE_P
-                                                        {struct Node * helper = createNode($5.symbol, emptyVector);
+                                                        {helper = createNode($5.symbol, emptyVector);
                                                         children.push_back(helper);
-                                                        struct Node * helper2 = createNode($3.symbol, children);
+                                                        helper2 = createNode($3.symbol, children);
                                                         children.push_back($1);
                                                         children.push_back(helper2);
                                                         $$ = createNode($2.symbol, children);}
                 | idVariations DOT ADD_DATA OPEN_P attribution CLOSE_P
                                                         {children.push_back($5);
-                                                        struct Node * helper = createNode($3.symbol, children);
+                                                        helper = createNode($3.symbol, children);
                                                         children.push_back($1);
                                                         children.push_back(helper);
                                                         $$ = createNode($2.symbol, children);}
                 | idVariations DOT PUSH OPEN_P attribution CLOSE_P
                                                         {children.push_back($5);
-                                                        struct Node * helper = createNode($3.symbol, children);
+                                                        helper = createNode($3.symbol, children);
+                                                        children.push_back($1);
+                                                        children.push_back(helper);
+                                                        $$ = createNode($2.symbol, children);}
+                | idVariations DOT POP OPEN_P CLOSE_P   {helper = createNode($3.symbol, emptyVector);
+                                                        children.push_back($1);
+                                                        children.push_back(helper);
+                                                        $$ = createNode($2.symbol, children);}
+                | idVariations DOT LENGTH OPEN_P CLOSE_P
+                                                        {helper = createNode($3.symbol, emptyVector);
                                                         children.push_back($1);
                                                         children.push_back(helper);
                                                         $$ = createNode($2.symbol, children);}

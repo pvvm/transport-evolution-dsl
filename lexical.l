@@ -199,6 +199,12 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "push"          {tokenCreator();
                 return PUSH;}
 
+"pop"           {tokenCreator();
+                return POP;}
+
+"enqueue"       {tokenCreator();
+                return ENQUEUE;}
+
 "next_event"    {tokenCreator();
                 return NEXT_EVENT;}
 
