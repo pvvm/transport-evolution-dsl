@@ -36,9 +36,9 @@ struct Node * helper4;
 %token <token> MATH_SUB_OP LOGIC_OR_OP LOGIC_AND_OP LOGIC_NOT_OP GREATER_OP LESSER_OP RELAT_HIGH_OP
 %token <token> RELAT_LOW_OP SLICE_OP ATTRIB_OP IF ELSE FOR FOREACH TIME IN RETURN TYPE LENGTH NEW_PKT
 %token <token> ADD_DATA ADD_HDR GET_HDR ADD NEXT_EVENT ENQUEUE PUSH POP ID OPEN_B CLOSE_B OPEN_S CLOSE_S
-%token <token> OPEN_P CLOSE_P DOT COMMA SEMIC ARROW
+%token <token> OPEN_P CLOSE_P DOT COMMA SEMIC ARROW TIMER SET_DURATION START STOP RESTART
 
-%type <node> program declarations headerDecl dispatcher dispMult dispDecl
+%type <node> program declarations headerDecl queueTMult dispatcher dispMult dispDecl
 %type <node> processorIds processorMult processorOrType processorType procTypeDecl
 %type <node> processorDecl context contVariables scheduler queues queueAndDrop
 %type <node> queueType queueTypeDecl queueDecl dropDecl
@@ -46,7 +46,7 @@ struct Node * helper4;
 %type <node> commonStmt dropCondition comCondition dropLoop comLoop loopArgs
 %type <node> firstArgument argument return varDecl types
 %type <node> attribution logicalOr logicalAnd compareExp relationExp
-%type <node> lowMathExp highMathExp unaryExp element idVariations squareBrackets sliceExp
+%type <node> lowMathExp highMathExp unaryExp element idVariations timerOps squareBrackets sliceExp
 
 %start program
 
@@ -62,12 +62,14 @@ program:        declarations                            {children = $1->children
                 | /* empty */                           {$$ = NULL;}
                 ;
 
-declarations:   headerDecl scheduler dispatcher processorMult context
-                                                        {children = removeBlankNodes($4);
+declarations:   headerDecl queueTMult scheduler dispatcher processorMult context
+                                                        {children = removeBlankNodes($5);
+                                                        children.insert(children.begin(), $4);
                                                         children.insert(children.begin(), $3);
-                                                        children.insert(children.begin(), $2);
+                                                        vector<struct Node*> aux = removeBlankNodes($2);
+                                                        children.insert(children.begin(), aux.begin(), aux.end());
                                                         children.insert(children.begin(), $1);
-                                                        children.push_back($5);
+                                                        children.push_back($6);
                                                         $$ = createNode("", children);}
                 ;
 
@@ -79,6 +81,28 @@ headerDecl:     HEADER ID OPEN_B contVariables CLOSE_B
                 ;
 
 // HEADER END
+
+// QUEUE TYPE START
+
+queueTMult:     queueTMult queueType                    {children = removeBlankNodes($2);
+                                                        children.insert(children.begin(), $1);
+                                                        $$ = createNode("", children);}
+                | queueType                             {$$ = $1;}
+                ;
+
+    // event id { ... };
+queueType:      EVENT ID OPEN_B queueTypeDecl CLOSE_B
+                                                        {children = treeToVector($4);
+                                                        $$ = createNode("eventDecl", children);}
+                ;
+
+    // int id;
+queueTypeDecl:  types ID SEMIC queueTypeDecl            {children.push_back($4);
+                                                        $$ = createNode($2.symbol, children);}
+                | types ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
+                ;
+
+// QUEUE TYPE END
 
 // DISPATCHER START
 
@@ -179,25 +203,11 @@ queues:         queues queueAndDrop                     {children = removeBlankN
                 | queueAndDrop                          {$$ = $1;}
                 ;
 
-queueAndDrop:   queueType                               {children.push_back($1);
-                                                        $$ = createNode("", children);}
-                | dropDecl                              {children.push_back($1);
+queueAndDrop:   dropDecl                              {children.push_back($1);
                                                         $$ = createNode("", children);}
                 | queueDecl                             {children.push_back($1);
                                                         $$ = createNode("", children);}
                 | enquDecl
-                ;
-
-    // event id { ... };
-queueType:      EVENT ID OPEN_B queueTypeDecl CLOSE_B
-                                                        {children = treeToVector($4);
-                                                        $$ = createNode("eventDecl", children);}
-                ;
-
-    // int id;
-queueTypeDecl:  types ID SEMIC queueTypeDecl            {children.push_back($4);
-                                                        $$ = createNode($2.symbol, children);}
-                | types ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
                 ;
 
     // queue_t<id> id (const, const, id); 
@@ -374,6 +384,7 @@ types:          INT_T                                   {$$ = NULL;}
                 | STREAM_T                              {$$ = NULL;}
                 | ID                                    {$$ = NULL;}
                 | BOOL_T                                {$$ = NULL;}
+                | LIST_T LESSER_OP INT_T GREATER_OP     {$$ = NULL;};
                 ;
 
 attribution:    idVariations ATTRIB_OP attribution      {children.push_back($1);
@@ -444,6 +455,29 @@ element:        idVariations                            {$$ = $1;}
                 | TRUE                                  {$$ = createNode($1.symbol, emptyVector);}
                 | OPEN_P attribution CLOSE_P            {$$ = $2;}
                 | TIME OPEN_P CLOSE_P                   {$$ = createNode($1.symbol, emptyVector);}
+                | timerOps                              {$$ = $1;}
+                ;
+
+timerOps:       TIMER DOT SET_DURATION OPEN_P CLOSE_P   {helper = createNode($1.symbol, emptyVector);
+                                                        children.push_back(helper);
+                                                        helper2 = createNode($3.symbol, emptyVector);
+                                                        children.push_back(helper2);
+                                                        $$ = createNode($2.symbol, children);}
+                | TIMER DOT START OPEN_P CLOSE_P        {helper = createNode($1.symbol, emptyVector);
+                                                        children.push_back(helper);
+                                                        helper2 = createNode($3.symbol, emptyVector);
+                                                        children.push_back(helper2);
+                                                        $$ = createNode($2.symbol, children);}
+                | TIMER DOT STOP OPEN_P CLOSE_P         {helper = createNode($1.symbol, emptyVector);
+                                                        children.push_back(helper);
+                                                        helper2 = createNode($3.symbol, emptyVector);
+                                                        children.push_back(helper2);
+                                                        $$ = createNode($2.symbol, children);}
+                | TIMER DOT RESTART OPEN_P CLOSE_P      {helper = createNode($1.symbol, emptyVector);
+                                                        children.push_back(helper);
+                                                        helper2 = createNode($3.symbol, emptyVector);
+                                                        children.push_back(helper2);
+                                                        $$ = createNode($2.symbol, children);}
                 ;
 
 idVariations:   idVariations DOT squareBrackets         {children.push_back($1);

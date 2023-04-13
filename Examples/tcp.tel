@@ -5,12 +5,21 @@ header TCPheader {
     int ack;
 }
 
-sched myScheduler {
+event SEND {
+    int time_event;
+    int flow_id;
+}
 
-    event SEND {
-        int time_event;
-        int flow_id;
-    }
+event ACK {
+    int flow_id;
+    int acknum;
+}
+
+event TIMER {
+    int flow_id;
+}
+
+sched myScheduler {
 
     int send_drop(queue_t send_queue, SEND new_event) {
         int most_recent = 0;
@@ -39,12 +48,6 @@ sched myScheduler {
 
     queue_t<SEND> send_queue(10, 20, send_drop);
 
-
-    event ACK {
-        int flow_id;
-        int acknum;
-    }
-
     int ack_drop(queue_t ack_queue, ACK new_event) {
         int index = ack_queue.len() - 1;
 
@@ -60,10 +63,6 @@ sched myScheduler {
     }
 
     queue_t<ACK> ack_queue(5, 15, ack_drop);
-
-    event TIMER {
-        int flow_id;
-    }
 
 
     int timer_drop(queue_t ack_queue, TIMER new_event) {
@@ -186,7 +185,7 @@ proc_out_t TIMERProcessor(TIMER this_event, myContext ctx) {
 
 context myContext {
     stream data;
-    stream startTime;
+    list<int> startTime;
     int m_Una;
     int m_Nxt;
     int m_start;

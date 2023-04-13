@@ -178,6 +178,21 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "len"           {tokenCreator();
                 return LENGTH;}
 
+"timer"         {tokenCreator();
+                return TIMER;}
+
+"set_duration"  {tokenCreator();
+                return SET_DURATION;}
+
+"start"         {tokenCreator();
+                return START;}
+
+"stop"          {tokenCreator();
+                return STOP;}
+
+"restart"       {tokenCreator();
+                return RESTART;}
+
 "time"          {tokenCreator();
                 return TIME;}
 
