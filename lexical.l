@@ -178,6 +178,21 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "len"           {tokenCreator();
                 return LENGTH;}
 
+"timer"         {tokenCreator();
+                return TIMER;}
+
+"set_duration"  {tokenCreator();
+                return SET_DURATION;}
+
+"start"         {tokenCreator();
+                return START;}
+
+"stop"          {tokenCreator();
+                return STOP;}
+
+"restart"       {tokenCreator();
+                return RESTART;}
+
 "time"          {tokenCreator();
                 return TIME;}
 
@@ -193,11 +208,23 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "get_hdr"       {tokenCreator();
                 return GET_HDR;}
 
+"get_data"      {tokenCreator();
+                return GET_DATA;}
+
 "add"           {tokenCreator();
                 return ADD;}
 
+"bytes"         {tokenCreator();
+                return BYTES;}
+
 "push"          {tokenCreator();
                 return PUSH;}
+
+"pop"           {tokenCreator();
+                return POP;}
+
+"enqueue"       {tokenCreator();
+                return ENQUEUE;}
 
 "next_event"    {tokenCreator();
                 return NEXT_EVENT;}

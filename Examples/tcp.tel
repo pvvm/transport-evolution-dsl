@@ -1,23 +1,33 @@
 header TCPheader {
     int srcport;
+    int srcip;
     int dstport;
+    int dstip;
     int seq;
-    int ack;
+}
+
+event SEND {
+    int time_event;
+    int flow_id;
+}
+
+event ACK {
+    int flow_id;
+    int acknum;
+}
+
+event TIMER {
+    int flow_id;
 }
 
 sched myScheduler {
-
-    event SEND {
-        int time_event;
-        int flow_id;
-    }
 
     int send_drop(queue_t send_queue, SEND new_event) {
         int most_recent = 0;
         int index = 0;
         int counter = 0;
 
-        foreach element in send_queue {
+        foreach (element in send_queue) {
             if(element.time_event > most_recent) {
                 most_recent = element.time_event;
                 index = counter;
@@ -28,7 +38,7 @@ sched myScheduler {
         return index;
     }
 
-    bool send_enqueue(event new_event) {
+    bool enqueue(event new_event) {
 
         if (type(new_event) == SEND) {
             send_queue.push(new_event);
@@ -37,21 +47,15 @@ sched myScheduler {
         return 0;
     }
 
-    queue_t <SEND> send_queue(10, 20, send_drop);
-
-
-    event ACK {
-        int flow_id;
-        int acknum;
-    }
+    queue_t<SEND> send_queue(10, 20, send_drop);
 
     int ack_drop(queue_t ack_queue, ACK new_event) {
-        int index = len(ack_queue) - 1;
+        int index = ack_queue.len() - 1;
 
         return index;
     }
 
-    bool ack_enqueue(event new_event) {
+    bool enqueue(event new_event) {
         if (type(new_event) == ACK) {
             ack_queue.push(new_event);
             return 1;
@@ -59,20 +63,16 @@ sched myScheduler {
         return 0;
     }
 
-    queue_t <ACK> ack_queue(5, 15, ack_drop);
-
-    event TIMER {
-        int flow_id;
-    }
+    queue_t<ACK> ack_queue(5, 15, ack_drop);
 
 
     int timer_drop(queue_t ack_queue, TIMER new_event) {
-        int index = len(ack_queue) - 1;
+        int index = ack_queue.len() - 1;
 
         return index;
     }
 
-    bool timer_enqueue(event new_event) {
+    bool enqueue(event new_event) {
         if (type(new_event) == TIMER) {
             timer_queue.push(new_event);
             return 1;
@@ -80,16 +80,16 @@ sched myScheduler {
         return 0;
     }
 
-    queue_t <TIMER> timer_queue(3, 10, timer_drop);
+    queue_t<TIMER> timer_queue(3, 10, timer_drop);
 
     event_t next_event(queue_t send_queue, queue_t ack_queue, queue_t timer_queue) {
-        if(len(timer_queue) > len(ack_queue) / 2) {
-            return TIMER;
+        if(timer_queue.len() > ack_queue.len() / 2) {
+            return send_queue.pop();
         }
-        if (len(send_queue) < len(ack_queue)) {
-            return ACK;
+        if (send_queue.len() < ack_queue.len()) {
+            return ack_queue.pop();
         }
-        return TIMER;
+        return timer_queue.pop();
     }
 }
 
@@ -100,8 +100,7 @@ dispatch table {
 }
 
 struct proc_out_t {
-    // This actually would be an event, not an event_t, right?
-    list<event> event_list;
+    list<event_t> event_list;
     list<pkt_t> packet_list;
 }
 
@@ -109,82 +108,77 @@ proc_out_t SendProcessor(SEND this_event, myContext ctx) {
     proc_out_t output;
 
     for(;
-    (ctx->m_Nxt < ctx->m_Una + ctx->m_Nxt) && (ctx->m_Nxt < ctx->flow_size);
-    ctx->m_Nxt = ctx->m_Nxt + ctx->m_segmentsize) {
+    (ctx.m_Nxt < ctx.m_Una + ctx.m_Nxt) && (ctx.m_Nxt < ctx.flow_size);
+    ctx.m_Nxt = ctx.m_Nxt + ctx.m_segmentsize) {
         TCPheader th;
-        th.seqnum = ctx->m_Iss + ctx->m_Nxt;
+        th.seq = ctx.m_Iss + ctx.m_Nxt;
         pkt_t p = new_pkt();
-        p.add_data(ctx->data[ctx->m_Nxt : ctx->m_segmentsize]);
+        p.add_data(ctx.data[ctx.m_Nxt : ctx.m_Nxt + ctx.m_segmentsize]);
         p.add_hdr(th);
         output.packet_list.add(p);
 
         float now = time();
-        //startTime is a map. I'll use stream for now, just so it can work
-        ctx->startTime[ctx->m_Iss + ctx->m_Nxt + ctx->m_segmentsize] = now;
+        ctx.startTime[ctx.m_Iss + ctx.m_Nxt + ctx.m_segmentsize] = now;
     }
 
-    // Nothing is added here?
-    //output.event_list.add();
     return output;
 }
 
 
 proc_out_t ACKProcessor(ACK this_event, myContext ctx) {
-    if(!ctx->timeouthappened && ctx->m_Una < this_event->acknum) {
+    proc_out_t output;
+    if(!ctx.timeouthappened && ctx.m_Una < this_event.acknum) {
         float now = time();
-        float R = now - ctx->startTime[this_event->acknum];
-        if (ctx->SRTT == 0) {
-            ctx->SRTT = R;
-            ctx->RTTVAR = R/2;
-            ctx->RTO = ctx->SRTT + 4 * ctx->RTTVAR;
+        float R = now - ctx.startTime[this_event.acknum];
+        if (ctx.SRTT == 0) {
+            ctx.SRTT = R;
+            ctx.RTTVAR = R/2;
+            ctx.RTO = ctx.SRTT + 4 * ctx.RTTVAR;
         } else {
             float alpha = 1.0 / 8.0;
             float beta = 1.0 / 4.0;
-            ctx->RTTVAR  = (1 - beta) * ctx->RTTVAR + beta * ctx->SRTT - R;
-            ctx->SRTT = (1 - alpha) * ctx->SRTT + alpha * R;
-            ctx->RTO = ctx->SRTT + 4 * ctx->RTTVAR;
+            ctx.RTTVAR  = (1 - beta) * ctx.RTTVAR + beta * ctx.SRTT - R;
+            ctx.SRTT = (1 - alpha) * ctx.SRTT + alpha * R;
+            ctx.RTO = ctx.SRTT + 4 * ctx.RTTVAR;
         }
-        if (ctx->RTO < 1) {
-            ctx->RTO = 1;
+        if (ctx.RTO < 1) {
+            ctx.RTO = 1;
         }
     }
 
-    if (ctx->m_Una < this_event->acknum) {
-        ctx->m_Wnd = ctx->m_Wnd + ctx->m_segmentsize;
-        ctx->m_Una = this_event->acknum;
-        // What should we do regarding RTOTimer?
-        //ctx->RTOTimer->reset(ctx->RTO);
-        ctx->timeouthappend = false;
-        // create a new event? do we need a new operation to do it?
+    if (ctx.m_Una < this_event->acknum) {
+        ctx.m_Wnd = ctx.m_Wnd + ctx.m_segmentsize;
+        ctx.m_Una = this_event->acknum;
+        timer.restart();
+        ctx.timeouthappend = false;
+        SEND new_event;
+        new_event.time_event = 0;
+        new_event.flow_id = this_event.flow_id;
+        output.event_list.add(new_event);
     }
-
-    // Add new event created?
-    output.event_list.add(new_event);
-	//output.packet_list.add();
     return output;
 }
 
 proc_out_t TIMERProcessor(TIMER this_event, myContext ctx) {
-
-    ctx->timeouthappened = true;
-    if (ctx->m_Una < ctx->flow_size) {
-        if (ctx->m_Wnd / 2 >= 1) {
-            ctx->m_Wnd = ctx->m_Wnd / 2;
+    proc_out_t output;
+    ctx.timeouthappened = true;
+    if (ctx.m_Una < ctx.flow_size) {
+        if (ctx.m_Wnd / 2 >= 1) {
+            ctx.m_Wnd = ctx.m_Wnd / 2;
         } else {
-            ctx->m_Wnd = 1;
+            ctx.m_Wnd = 1;
         }
         TCPheader th;
-        th.seqnum = ctx->m_Una;
-        ctx->RTO = ctx->RTO * 2;
-        if (ctx->RTO < 3) {
-            ctx->RTO = 3.0;
+        th.seq = ctx.m_Una;
+        ctx.RTO = ctx.RTO * 2;
+        if (ctx.RTO < 3) {
+            ctx.RTO = 3.0;
         }
         pkt_t p = new_pkt();
-        p.add_data(ctx->data[ctx->m_Una : ctx->m_segmentsize]);
+        p.add_data(ctx.data[ctx.m_Una : ctx.m_Una + ctx.m_segmentsize]);
         p.add_hdr(th);
     }
 
-    //output.event_list.add();
 	output.packet_list.add(p);
     return output;
 }
@@ -192,7 +186,7 @@ proc_out_t TIMERProcessor(TIMER this_event, myContext ctx) {
 
 context myContext {
     stream data;
-    stream startTime;
+    list<int> startTime;
     int m_Una;
     int m_Nxt;
     int m_start;

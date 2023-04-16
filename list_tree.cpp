@@ -49,10 +49,11 @@ vector<struct Node*> removeBlankNodes(struct Node* node) {
         resultVector.push_back(node);
         return resultVector;
     }
-    resultVector = removeBlankNodes(node->children[0]);
-    for(int i = 1; i < node->children.size(); i++)
-        resultVector.push_back(node->children[i]);
-
+    if(node->children.size() != 0) {
+        resultVector = removeBlankNodes(node->children[0]);
+        for(int i = 1; i < node->children.size(); i++)
+            resultVector.push_back(node->children[i]);
+    }
     delete node;
 
     return resultVector;
