@@ -208,8 +208,14 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "get_hdr"       {tokenCreator();
                 return GET_HDR;}
 
+"get_data"      {tokenCreator();
+                return GET_DATA;}
+
 "add"           {tokenCreator();
                 return ADD;}
+
+"bytes"         {tokenCreator();
+                return BYTES;}
 
 "push"          {tokenCreator();
                 return PUSH;}

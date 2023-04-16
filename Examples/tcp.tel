@@ -1,8 +1,9 @@
 header TCPheader {
     int srcport;
+    int srcip;
     int dstport;
+    int dstip;
     int seq;
-    int ack;
 }
 
 event SEND {
@@ -26,7 +27,7 @@ sched myScheduler {
         int index = 0;
         int counter = 0;
 
-        foreach element in send_queue {
+        foreach (element in send_queue) {
             if(element.time_event > most_recent) {
                 most_recent = element.time_event;
                 index = counter;
@@ -117,7 +118,6 @@ proc_out_t SendProcessor(SEND this_event, myContext ctx) {
         output.packet_list.add(p);
 
         float now = time();
-        //startTime is a map. I'll use stream for now, just so it can work
         ctx.startTime[ctx.m_Iss + ctx.m_Nxt + ctx.m_segmentsize] = now;
     }
 
@@ -127,9 +127,9 @@ proc_out_t SendProcessor(SEND this_event, myContext ctx) {
 
 proc_out_t ACKProcessor(ACK this_event, myContext ctx) {
     proc_out_t output;
-    if(!ctx.timeouthappened && ctx.m_Una < this_event->acknum) {
+    if(!ctx.timeouthappened && ctx.m_Una < this_event.acknum) {
         float now = time();
-        float R = now - ctx.startTime[this_event->acknum];
+        float R = now - ctx.startTime[this_event.acknum];
         if (ctx.SRTT == 0) {
             ctx.SRTT = R;
             ctx.RTTVAR = R/2;
@@ -149,10 +149,11 @@ proc_out_t ACKProcessor(ACK this_event, myContext ctx) {
     if (ctx.m_Una < this_event->acknum) {
         ctx.m_Wnd = ctx.m_Wnd + ctx.m_segmentsize;
         ctx.m_Una = this_event->acknum;
-        // What should we do regarding RTOTimer?
-        //ctx.RTOTimer.reset(ctx.RTO);
+        timer.restart();
         ctx.timeouthappend = false;
         SEND new_event;
+        new_event.time_event = 0;
+        new_event.flow_id = this_event.flow_id;
         output.event_list.add(new_event);
     }
     return output;

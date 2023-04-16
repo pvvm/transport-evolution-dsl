@@ -1,7 +1,14 @@
 # transport-evolution-dsl
+
+The transport layer model's DSL
+Pedro Vitor Valenca Mizuno
+
+Prerequisites:
+Flex 2.6.4
+Bison 3.8.2
+
 Compile:
-flex lexical.l
-gcc lex.yy.c -Wall -o file_name
+make
 
 Execute:
-./file_name example.tel
+./compiler Examples/tcp.tel
