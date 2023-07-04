@@ -3,6 +3,7 @@
 
 %{
 #include "list_tree.hpp"
+#include "symbol_table.hpp"
 
 extern int yylex(void);
 extern int yylex_destroy(void);
@@ -12,10 +13,14 @@ void yyerror(const char *);
 
 vector<struct Node*> children;
 vector<struct Node*> emptyVector;
+vector<struct Entry*> symbolTable;
 struct Node * helper;
 struct Node * helper2;
 struct Node * helper3;
 struct Node * helper4;
+
+int maximumScope = 0;
+vector<int> scopeList;
 %}
 
 %code requires {
@@ -23,12 +28,14 @@ struct Node * helper4;
         char symbol[50];
         int line;
         int column;
+        int scope;
     };
 }
 
 %union {
     struct token token;
     struct Node* node;
+    struct Entry* entry;
 }
 
 %token <token> INT_T FLOAT_T BOOL_T STREAM_T EVENT EVENT_T QUEUE_T SCHEDULER_T DISPATCH LIST_T PACKET_T
@@ -43,13 +50,25 @@ struct Node * helper4;
 %type <node> processorDecl context contVariables scheduler queues queueAndDrop
 %type <node> queueType queueTypeDecl queueDecl dropDecl
 %type <node> enquDecl nextEvent nextParam /*dropMultStmt dropStmt*/ comMultStmt
-%type <node> commonStmt /*dropCondition*/ comCondition dropLoop comLoop loopArgs
+%type <node> commonStmt /*dropCondition*/ conditionDecl comCondition dropLoop comLoop loopArgs
 %type <node> firstArgument argument return varDecl types
 %type <node> attribution logicalOr logicalAnd compareExp relationExp
 %type <node> lowMathExp highMathExp unaryExp element idVariations timerOps squareBrackets sliceExp
 
 // CHECK: FOREACH FOR BOTH OR NOT
 // CHECK: PROC_OUT_T KEYWORD OR NOT
+
+/*
+TO DO:
+CHECK IF WE WILL HAVE CONDITION AND LOOP WITHOUT BRACKETS
+IF SO, INCREASE SCOPE WITHOUT BRACKETS
+
+FIX STMTS ON THE SYNTAX TREE FOR IFELSE/IF
+
+FIX COLUMN NUMBER ON SYMBOL TABLE
+
+PUT ENTRIES ON THE SYMBOL TABLE FOR FUNCTION ARGUMENTS
+*/
 
 %start program
 
@@ -61,7 +80,9 @@ program:        declarations                            {children = $1->children
                                                         fstream file;
                                                         file.open("tree_result.txt", ios::out);
                                                         printTree($$, 0, file);
-                                                        freeTree($$);}
+                                                        printTable(symbolTable);
+                                                        freeTree($$);
+                                                        freeTable(symbolTable);}
                 | /* empty */                           {$$ = NULL;}
                 ;
 
@@ -78,8 +99,11 @@ declarations:   headerDecl queueTMult scheduler dispatcher processorMult context
 
 // HEADER START
 
-headerDecl:     HEADER ID OPEN_B contVariables CLOSE_B
-                                                        {children = removeBlankNodes($4);
+headerDecl:     HEADER ID                               {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        increaseScope(scopeList, maximumScope);}
+                    OPEN_B contVariables CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($5);
                                                         $$ = createNode("headerDecl", children);}
                 ;
 
@@ -94,15 +118,21 @@ queueTMult:     queueTMult queueType                    {children = removeBlankN
                 ;
 
     // event id { ... };
-queueType:      EVENT ID OPEN_B queueTypeDecl CLOSE_B
-                                                        {children = treeToVector($4);
+queueType:      EVENT ID                                {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        increaseScope(scopeList, maximumScope);}
+                    OPEN_B queueTypeDecl CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = treeToVector($5);
                                                         $$ = createNode("eventDecl", children);}
                 ;
 
     // int id;
-queueTypeDecl:  types ID SEMIC queueTypeDecl            {children.push_back($4);
+queueTypeDecl:  types ID                                {createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        freeNode($1);}
+                    SEMIC queueTypeDecl                 {if($5 != NULL)
+                                                            children.push_back($5);
                                                         $$ = createNode($2.symbol, children);}
-                | types ID SEMIC                        {$$ = createNode($2.symbol, emptyVector);}
+                | /* empty */                           {$$ = NULL;}
                 ;
 
 // QUEUE TYPE END
@@ -110,8 +140,11 @@ queueTypeDecl:  types ID SEMIC queueTypeDecl            {children.push_back($4);
 // DISPATCHER START
 
     // dispatch_table_t id = { ... };
-dispatcher:     DISPATCH ID OPEN_B dispMult CLOSE_B
-                                                        {children = removeBlankNodes($4);
+dispatcher:     DISPATCH ID                             {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        increaseScope(scopeList, maximumScope);}
+                    OPEN_B dispMult CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($5);
                                                         $$ = createNode("dispatcherDecl", children);}
                 ;
 
@@ -148,11 +181,17 @@ processorOrType: structDecl                             {$$ = $1;}
 
 // check this later
     // struct proc_out_t { ... }
-structDecl:     STRUCT_T PROC_OUT_T OPEN_B contVariables CLOSE_B
-                                                        {children = removeBlankNodes($4);
+structDecl:     STRUCT_T PROC_OUT_T                     {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        increaseScope(scopeList, maximumScope);}
+                    OPEN_B contVariables CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($5);
                                                         $$ = createNode("structDecl", children);}
-                | STRUCT_T ID OPEN_B contVariables CLOSE_B
-                                                        {children = removeBlankNodes($4);
+                | STRUCT_T ID OPEN_B                    {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        increaseScope(scopeList, maximumScope);}
+                    contVariables CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($5);
                                                         $$ = createNode("structDecl", children);}
                 ;
 
@@ -170,8 +209,12 @@ structDecl:     STRUCT_T PROC_OUT_T OPEN_B contVariables CLOSE_B
                 ;*/
 
     // proc_out_t id (id id) { ... }
-processorDecl:  PROC_OUT_T ID OPEN_P ID ID COMMA ID ID CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {children = removeBlankNodes($11);
+processorDecl:  PROC_OUT_T ID OPEN_P ID ID COMMA ID ID CLOSE_P
+                                                        {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        increaseScope(scopeList, maximumScope);}
+                    OPEN_B comMultStmt CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($12);
                                                         $$ = createNode("processorDecl", children);}
                 ;
 
@@ -180,8 +223,11 @@ processorDecl:  PROC_OUT_T ID OPEN_P ID ID COMMA ID ID CLOSE_P OPEN_B comMultStm
 // CONTEXT START
 
     // context_t id { ... }
-context:        CONTEXT_T ID OPEN_B contVariables CLOSE_B
-                                                        {children = removeBlankNodes($4);
+context:        CONTEXT_T ID                            {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        increaseScope(scopeList, maximumScope);}
+                    OPEN_B contVariables CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($5);
                                                         $$ = createNode("contextDecl", children);}
                 ;
 
@@ -197,9 +243,12 @@ contVariables:  varDecl SEMIC contVariables             {children = removeBlankN
 // SCHEDULER START
 
     // scheduler_t id { ... }
-scheduler:      SCHEDULER_T ID OPEN_B queues nextEvent CLOSE_B
-                                                        {children = removeBlankNodes($4);
-                                                        children.push_back($5);
+scheduler:      SCHEDULER_T ID                          {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        increaseScope(scopeList, maximumScope);}
+                    OPEN_B queues nextEvent CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($5);
+                                                        children.push_back($6);
                                                         $$ = createNode("schedulerDecl", children);}
                 ;
 
@@ -211,7 +260,7 @@ queues:         queues queueAndDrop                     {children = removeBlankN
                 | queueAndDrop                          {$$ = $1;}
                 ;
 
-queueAndDrop:   dropDecl                              {children.push_back($1);
+queueAndDrop:   dropDecl                                {children.push_back($1);
                                                         $$ = createNode("", children);}
                 | queueDecl                             {children.push_back($1);
                                                         $$ = createNode("", children);}
@@ -220,14 +269,19 @@ queueAndDrop:   dropDecl                              {children.push_back($1);
 
     // queue_t<id> id (const, const, id); 
 queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID OPEN_P CONST_INT COMMA CONST_INT COMMA ID CLOSE_P SEMIC
-                                                        {helper = createNode($5.symbol, emptyVector);
+                                                        {createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        helper = createNode($5.symbol, emptyVector);
                                                         children.push_back(helper);
                                                         $$ = createNode("queueDecl", children);}
                 ;
 
     // int id (queue_t id, id id) { ... }
-dropDecl:       INT_T ID OPEN_P QUEUE_T ID COMMA ID ID CLOSE_P OPEN_B /*dropMultStmt*/ comMultStmt CLOSE_B
-                                                        {children = removeBlankNodes($11);
+dropDecl:       INT_T ID OPEN_P QUEUE_T ID COMMA ID ID CLOSE_P
+                                                        {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        increaseScope(scopeList, maximumScope);}
+                    OPEN_B /*dropMultStmt*/ comMultStmt CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($12);
                                                         $$ = createNode("dropDecl", children);}
                 ;
 
@@ -236,14 +290,21 @@ dropDecl:       INT_T ID OPEN_P QUEUE_T ID COMMA ID ID CLOSE_P OPEN_B /*dropMult
 // SCHEDULLER DEFAULT FUNCTIONS START
 
     // bool enqueue (event id) { ... }
-enquDecl:       BOOL_T ENQUEUE OPEN_P EVENT ID CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {children = removeBlankNodes($8);
+enquDecl:       BOOL_T ENQUEUE OPEN_P EVENT ID CLOSE_P  {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        increaseScope(scopeList, maximumScope);}
+                    OPEN_B comMultStmt CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($9);
                                                         $$ = createNode("enqueueDecl", children);}
                 ;
 
     // event_t next_event () { ... }
-nextEvent:      EVENT_T NEXT_EVENT OPEN_P nextParam CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {children = removeBlankNodes($7);
+nextEvent:      EVENT_T NEXT_EVENT OPEN_P nextParam CLOSE_P
+                                                        {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        increaseScope(scopeList, maximumScope);}
+                    OPEN_B comMultStmt CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($8);
                                                         $$ = createNode("nextEventDecl", children);}
                 ;
 
@@ -277,7 +338,7 @@ comMultStmt:    comMultStmt commonStmt                  {children.push_back($1);
                 | commonStmt                            {$$ = $1;}
                 ;
 
-commonStmt:     comCondition                            {$$ = $1;}
+commonStmt:     conditionDecl                            {$$ = $1;}
                 | comLoop                               {$$ = $1;}
                 | dropLoop                              {$$ = $1;}
                 | attribution SEMIC                     {$$ = $1;}
@@ -312,35 +373,43 @@ dropCondition:   IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B
 
     // if ( ... ) { ... }
     // if ( ... ) { ... } else { ... }
-comCondition:   IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {children.push_back($3);
+
+conditionDecl:  IF                                      {increaseScope(scopeList, maximumScope);}
+                    OPEN_P attribution CLOSE_P OPEN_B comCondition
+                                                        {children.push_back($4);
                                                         helper = createNode("ifArg", children);
-                                                        children = removeBlankNodes($6);
-                                                        helper2 = createNode("ifStmts", children);
+                                                        children = removeBlankNodes($7);
+                                                        helper2 = createNode("ifStmts", children); // Check this later
                                                         children.push_back(helper);
                                                         children.push_back(helper2);
                                                         $$ = createNode("if", children);}
+                ;
 
-                | IF OPEN_P attribution CLOSE_P OPEN_B comMultStmt CLOSE_B ELSE OPEN_B comMultStmt CLOSE_B
-                                                        {children.push_back($3);
-                                                        helper = createNode("ifArg", children);
-                                                        children = removeBlankNodes($6);
-                                                        helper2 = createNode("ifStmts", children);
-                                                        children = removeBlankNodes($10);
-                                                        helper3 = createNode("elseStmts", children);
+comCondition:   comMultStmt CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($1);
+                                                        $$ = createNode("", children);}
+
+                | comMultStmt CLOSE_B ELSE OPEN_B comMultStmt CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($1);
+                                                        helper = createNode("ifStmts", children);
+                                                        children = removeBlankNodes($5);
+                                                        helper2 = createNode("elseStmts", children);
                                                         children.push_back(helper);
                                                         children.push_back(helper2);
-                                                        children.push_back(helper3);
-                                                        $$ = createNode("ifelse", children);}
+                                                        $$ = createNode("", children);}
                 ;
 
     // foreach id in id { ... }
-dropLoop:       FOREACH OPEN_P ID IN idVariations CLOSE_P OPEN_B /*dropMultStmt*/ comMultStmt CLOSE_B
-                                                        {children = removeBlankNodes($8);
+dropLoop:       FOREACH                                 {increaseScope(scopeList, maximumScope);}
+                    OPEN_P ID IN idVariations CLOSE_P OPEN_B /*dropMultStmt*/ comMultStmt CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($9);
                                                         helper = createNode("loopStmts", children);
-                                                        helper2 = createNode($3.symbol, emptyVector);
+                                                        helper2 = createNode($4.symbol, emptyVector);
                                                         children.push_back(helper2);
-                                                        children.push_back($5);
+                                                        children.push_back($6);
                                                         helper4 = createNode("loopArgs", children);
                                                         children.push_back(helper4);
                                                         children.push_back(helper);
@@ -348,10 +417,12 @@ dropLoop:       FOREACH OPEN_P ID IN idVariations CLOSE_P OPEN_B /*dropMultStmt*
                 ;
 
     // for ( ... ) { ... }
-comLoop:        FOR OPEN_P loopArgs CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {children = removeBlankNodes($6);
+comLoop:        FOR                                     {increaseScope(scopeList, maximumScope);}
+                    OPEN_P loopArgs CLOSE_P OPEN_B comMultStmt CLOSE_B
+                                                        {decreaseScope(scopeList);
+                                                        children = removeBlankNodes($7);
                                                         helper = createNode("loopStmts", children);
-                                                        children.push_back($3);
+                                                        children.push_back($4);
                                                         children.push_back(helper);
                                                         $$ = createNode("for", children);}
                 ;
@@ -376,23 +447,29 @@ return:         RETURN attribution                      {children.push_back($2);
                                                         $$ = createNode($1.symbol, children);}
                 ;
 
-varDecl:        types ID                                {$$ = createNode($2.symbol, emptyVector);}
-                | types ID ATTRIB_OP attribution        {helper = createNode($2.symbol, emptyVector);
+varDecl:        types ID                                {createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        freeNode($1);
+                                                        $$ = createNode($2.symbol, emptyVector);}
+                | types ID ATTRIB_OP attribution        {createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        freeNode($1);
+                                                        helper = createNode($2.symbol, emptyVector);
                                                         children.push_back(helper);
                                                         children.push_back($4);
                                                         $$ = createNode($3.symbol, children);}
                 | LIST_T LESSER_OP types GREATER_OP ID
-                                                        {$$ = createNode($5.symbol, emptyVector);}
+                                                        {createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        freeNode($3);
+                                                        $$ = createNode($5.symbol, emptyVector);}
                 | PROC_OUT_T ID                         {$$ = createNode($2.symbol, emptyVector);}
                 ;
 
-types:          INT_T                                   {$$ = NULL;}
-                | FLOAT_T                               {$$ = NULL;}
-                | STREAM_T                              {$$ = NULL;}
-                | ID                                    {$$ = NULL;}
-                | BOOL_T                                {$$ = NULL;}
-                | EVENT_T                               {$$ = NULL;}
-                | PACKET_T                               {$$ = NULL;}
+types:          INT_T                                   {$$ = createNode($1.symbol, emptyVector);}
+                | FLOAT_T                               {$$ = createNode($1.symbol, emptyVector);}
+                | STREAM_T                              {$$ = createNode($1.symbol, emptyVector);}
+                | ID                                    {$$ = createNode($1.symbol, emptyVector);}
+                | BOOL_T                                {$$ = createNode($1.symbol, emptyVector);}
+                | EVENT_T                               {$$ = createNode($1.symbol, emptyVector);}
+                | PACKET_T                              {$$ = createNode($1.symbol, emptyVector);}
                 ;
 
 attribution:    idVariations ATTRIB_OP attribution      {children.push_back($1);
@@ -570,6 +647,7 @@ void yyerror(const char *error){
 }
 
 int main(int arc, char **argv) {
+    scopeList.push_back(maximumScope);
     FILE *fp = fopen(argv[1], "r");
     if(fp) {
         yyin = fp;

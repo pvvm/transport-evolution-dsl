@@ -84,11 +84,22 @@ void printTree(struct Node* node, int printSpacing, fstream& file) {
 Frees memory allocated to tree
 Uses recursion to access child node
 
-node: node which will freed
+node: node which will be freed
 */
 void freeTree(struct Node* node) {
     for(struct Node* child : node->children) {
         freeTree(child);
     }
+    delete node;
+}
+
+/*
+Frees memory allocated for a node
+Used to delete type nodes, which are used
+to build the symbol table
+
+node: node which will be freed
+*/
+void freeNode(struct Node* node) {
     delete node;
 }
