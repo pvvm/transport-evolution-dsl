@@ -1,7 +1,10 @@
 # transport-evolution-dsl
 
 The transport layer model's DSL
-Pedro Vitor Valenca Mizuno
+
+By Pedro Vitor Valenca Mizuno
+
+Under the supervision of Mina Tahmasbi Arashloo
 
 Prerequisites:
 Flex 2.6.4
