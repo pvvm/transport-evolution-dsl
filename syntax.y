@@ -4,6 +4,7 @@
 %{
 #include "list_tree.hpp"
 #include "symbol_table.hpp"
+#include "semantic.hpp"
 
 extern int yylex(void);
 extern int yylex_destroy(void);
@@ -268,9 +269,9 @@ queueAndDrop:   dropDecl                                {children.push_back($1);
                 ;
 
     // queue_t<id> id (const, const, id); 
-queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID OPEN_P CONST_INT COMMA CONST_INT COMMA ID CLOSE_P SEMIC
-                                                        {createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
-                                                        helper = createNode($5.symbol, emptyVector);
+queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID      {createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);}
+                    OPEN_P CONST_INT COMMA CONST_INT COMMA ID CLOSE_P SEMIC
+                                                        {helper = createNode($5.symbol, emptyVector);
                                                         children.push_back(helper);
                                                         $$ = createNode("queueDecl", children);}
                 ;
@@ -447,20 +448,29 @@ return:         RETURN attribution                      {children.push_back($2);
                                                         $$ = createNode($1.symbol, children);}
                 ;
 
-varDecl:        types ID                                {createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+varDecl:        types ID                                {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
+                                                            YYABORT;
+                                                        createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
                                                         freeNode($1);
                                                         $$ = createNode($2.symbol, emptyVector);}
-                | types ID ATTRIB_OP attribution        {createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                | types ID ATTRIB_OP attribution        {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
+                                                            YYABORT;
+                                                        createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
                                                         freeNode($1);
                                                         helper = createNode($2.symbol, emptyVector);
                                                         children.push_back(helper);
                                                         children.push_back($4);
                                                         $$ = createNode($3.symbol, children);}
                 | LIST_T LESSER_OP types GREATER_OP ID
-                                                        {createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        {if(alreadyDeclared(symbolTable, $5.symbol, scopeList.back()))
+                                                            YYABORT;
+                                                        createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
                                                         freeNode($3);
                                                         $$ = createNode($5.symbol, emptyVector);}
-                | PROC_OUT_T ID                         {$$ = createNode($2.symbol, emptyVector);}
+                | PROC_OUT_T ID                         {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
+                                                            YYABORT;
+                                                        createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.column, symbolTable);
+                                                        $$ = createNode($2.symbol, emptyVector);}
                 ;
 
 types:          INT_T                                   {$$ = createNode($1.symbol, emptyVector);}
@@ -629,7 +639,9 @@ squareBrackets: squareBrackets OPEN_S sliceExp CLOSE_S
                                                         {children.push_back($1);
                                                         children.push_back($3);
                                                         $$ = createNode("index", children);}
-                | ID                                    {$$ = createNode($1.symbol, emptyVector);}
+                | ID                                    {if(notDeclared(symbolTable, $1.symbol, scopeList.back()))
+                                                            YYABORT;
+                                                        $$ = createNode($1.symbol, emptyVector);}
                 ;
 
 sliceExp:       sliceExp SLICE_OP logicalOr             {children.push_back($1);
