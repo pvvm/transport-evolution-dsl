@@ -6,6 +6,7 @@
 
 int line = 1;
 int column = 1;
+int columnBegin = 1;
 
 void tokenCreator();
 %}
@@ -275,7 +276,9 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 
 void tokenCreator() {
     strcpy(yylval.token.symbol, yytext);
+    yylval.token.columnBegin = yylval.token.column;
     yylval.token.line = line;
     yylval.token.column = column;
+    
     column += yyleng;
 }
