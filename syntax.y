@@ -54,20 +54,18 @@ int columnBeginDecl = 0;
 %type <node> processorDecl context contVariables scheduler queues queueAndDrop
 %type <node> queueType queueTypeDecl queueDecl dropDecl
 %type <node> enquDecl nextEvent nextParam /*dropMultStmt dropStmt*/ comMultStmt
-%type <node> commonStmt /*dropCondition*/ conditionDecl comCondition dropLoop comLoop loopArgs
-%type <node> firstArgument argument return varDecl types
+%type <node> commonStmt /*dropCondition*/ conditionDecl argCondition comCondition dropLoop comLoop loopArgs
+%type <node> bracketsOrNot firstArgument argument return varDecl types
 %type <node> attribution logicalOr logicalAnd compareExp relationExp
 %type <node> lowMathExp highMathExp unaryExp element idVariations builtInFunc timerOps squareBrackets sliceExp
+
+%right ELSE CLOSE_P
 
 // CHECK: FOREACH FOR BOTH OR NOT
 // CHECK: PROC_OUT_T KEYWORD OR NOT
 
 /*
 TO DO:
-CHECK IF WE WILL HAVE CONDITION AND LOOP WITHOUT BRACKETS
-IF SO, INCREASE SCOPE WITHOUT BRACKETS
-
-FIX STMTS ON THE SYNTAX TREE FOR IFELSE/IF
 
 FIX GET_HDR<>. IT IS CONSIDERING THEY ARE OPERATORS < AND >
 
@@ -379,27 +377,35 @@ dropCondition:   IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B
     // if ( ... ) { ... } else { ... }
 
 conditionDecl:  IF                                      {increaseScope(scopeList, maximumScope);}
-                    OPEN_P attribution CLOSE_P OPEN_B comCondition
+                    OPEN_P argCondition comCondition
                                                         {children.push_back($4);
                                                         helper = createNode("ifArg", children);
-                                                        children = removeBlankNodes($7);
-                                                        helper2 = createNode("ifStmts", children); // Check this later
                                                         children.push_back(helper);
-                                                        children.push_back(helper2);
+                                                        vector<struct Node*> aux = removeBlankNodes($5);
+                                                        for(auto node : aux)
+                                                            children.push_back(node);
                                                         $$ = createNode("if", children);}
                 ;
 
-comCondition:   comMultStmt CLOSE_B
+argCondition:   varDecl                                 {$$ = $1;}
+                | attribution                           {$$ = $1;}
+                ;
+
+comCondition:   CLOSE_P bracketsOrNot
                                                         {decreaseScope(scopeList);
-                                                        children = removeBlankNodes($1);
+                                                        children = removeBlankNodes($2);
+                                                        helper = createNode("then", children);
+                                                        children.push_back(helper);
                                                         $$ = createNode("", children);}
 
-                | comMultStmt CLOSE_B ELSE OPEN_B comMultStmt CLOSE_B
+                | CLOSE_P bracketsOrNot ELSE            {decreaseScope(scopeList);
+                                                        increaseScope(scopeList, maximumScope);}
+                    bracketsOrNot      
                                                         {decreaseScope(scopeList);
-                                                        children = removeBlankNodes($1);
-                                                        helper = createNode("ifStmts", children);
+                                                        children = removeBlankNodes($2);
+                                                        helper = createNode("then", children);
                                                         children = removeBlankNodes($5);
-                                                        helper2 = createNode("elseStmts", children);
+                                                        helper2 = createNode("else", children);
                                                         children.push_back(helper);
                                                         children.push_back(helper2);
                                                         $$ = createNode("", children);}
@@ -407,9 +413,9 @@ comCondition:   comMultStmt CLOSE_B
 
     // foreach id in id { ... }
 dropLoop:       FOREACH                                 {increaseScope(scopeList, maximumScope);}
-                    OPEN_P ID IN idVariations CLOSE_P OPEN_B /*dropMultStmt*/ comMultStmt CLOSE_B
+                    OPEN_P ID IN idVariations CLOSE_P bracketsOrNot
                                                         {decreaseScope(scopeList);
-                                                        children = removeBlankNodes($9);
+                                                        children = removeBlankNodes($8);
                                                         helper = createNode("loopStmts", children);
                                                         helper2 = createNode($4.symbol, emptyVector);
                                                         children.push_back(helper2);
@@ -422,13 +428,17 @@ dropLoop:       FOREACH                                 {increaseScope(scopeList
 
     // for ( ... ) { ... }
 comLoop:        FOR                                     {increaseScope(scopeList, maximumScope);}
-                    OPEN_P loopArgs CLOSE_P OPEN_B comMultStmt CLOSE_B
+                    OPEN_P loopArgs CLOSE_P bracketsOrNot
                                                         {decreaseScope(scopeList);
-                                                        children = removeBlankNodes($7);
+                                                        children = removeBlankNodes($6);
                                                         helper = createNode("loopStmts", children);
                                                         children.push_back($4);
                                                         children.push_back(helper);
                                                         $$ = createNode("for", children);}
+                ;
+
+bracketsOrNot:  OPEN_B comMultStmt CLOSE_B              {$$ = $2;}
+                | commonStmt                            {$$ = $1;}
                 ;
 
 loopArgs:       firstArgument SEMIC argument SEMIC argument 
