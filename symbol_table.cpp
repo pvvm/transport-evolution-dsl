@@ -1,14 +1,33 @@
 #include "symbol_table.hpp"
 
+/*
+Increases the new scope and adds it to scope list
+scope: list of scopes we are in
+maximum: the scope with highest number
+*/
 void increaseScope(vector<int>& scope, int& maximumScope) {
     maximumScope++;
     scope.push_back(maximumScope);
 }
 
+/*
+Pops a scope from the scope list
+Used when we are leaving a scope
+scope: list of scopes we are in
+*/
 void decreaseScope(vector<int>& scope) {
     scope.pop_back();
 }
 
+/*
+Creates a new entry to the symbol table
+symbol: identifier of the entry
+type: type of the variable, returned value from a function, ...
+scope: list of scopes we are in
+line: line where the symbol is located in the inputed code
+column: column where the symbol is located in the inputed code
+table: the symbol table
+*/
 void createEntry(string symbol, string type, vector<int> scope,
 int line, int column, vector<struct Entry*> & table) {
     Entry* entry = new Entry; 
@@ -20,6 +39,10 @@ int line, int column, vector<struct Entry*> & table) {
     table.push_back(entry);
 }
 
+/*
+Prints the symbol table
+table: the symbol table
+*/
 void printTable(vector<struct Entry*> table) {
     const int l = 20, total = 101;
 
@@ -45,6 +68,10 @@ void printTable(vector<struct Entry*> table) {
     << setw(l) << "|" << setw(l) << "|" << setw(l) << "|" << endl;
 }
 
+/*
+Frees the memory allocated for the symbol table
+table: the symbol table
+*/
 void freeTable(vector<struct Entry*> table) {
     for(struct Entry* entry : table)
         delete entry;

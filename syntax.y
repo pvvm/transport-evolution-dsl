@@ -49,12 +49,12 @@ int columnBeginDecl = 0;
 %token <token> LENGTH ADD_DATA ADD_HDR GET_HDR GET_DATA ADD PUSH POP BYTES NEXT_EVENT ENQUEUE ID OPEN_B CLOSE_B OPEN_S CLOSE_S
 %token <token> OPEN_P CLOSE_P DOT COMMA SEMIC ARROW TIMER SET_DURATION START STOP RESTART
 
-%type <node> program declarations headerDecl queueTMult dispatcher dispMult dispDecl
-%type <node> processorIds processorMult processorOrType structDecl //structMembers
+%type <node> program multDecl declarations headerDecl dispatcher dispMult dispDecl
+%type <node> processorIds processorOrType structDecl 
 %type <node> processorDecl context contVariables scheduler queues queueAndDrop
 %type <node> queueType queueTypeDecl queueDecl dropDecl
-%type <node> enquDecl nextEvent nextParam /*dropMultStmt dropStmt*/ comMultStmt
-%type <node> commonStmt /*dropCondition*/ conditionDecl argCondition comCondition dropLoop comLoop loopArgs
+%type <node> enquDecl nextEvent nextParam comMultStmt
+%type <node> commonStmt conditionDecl argCondition comCondition dropLoop comLoop loopArgs
 %type <node> bracketsOrNot firstArgument argument return varDecl types
 %type <node> attribution logicalOr logicalAnd compareExp relationExp
 %type <node> lowMathExp highMathExp unaryExp element idVariations builtInFunc timerOps squareBrackets sliceExp
@@ -69,26 +69,31 @@ TO DO:
 
 FIX GET_HDR<>. IT IS CONSIDERING THEY ARE OPERATORS < AND >
 
-PUT ENTRIES ON THE SYMBOL TABLE FOR FUNCTION ARGUMENTS
 */
 
 %start program
 
 %%
 
-program:        declarations                            {children = $1->children;
-                                                        delete $1;
+program:        multDecl                                {children = removeBlankNodes($1);
                                                         $$ = createNode("program", children);
                                                         fstream file;
                                                         file.open("tree_result.txt", ios::out);
                                                         printTree($$, 0, file);
                                                         printTable(symbolTable);
                                                         freeTree($$);
-                                                        freeTable(symbolTable);}
+                                                        freeTable(symbolTable);
+                                                        delete $1;}
                 | /* empty */                           {$$ = NULL;}
                 ;
 
-declarations:   headerDecl queueTMult scheduler dispatcher processorMult context
+multDecl:       multDecl declarations                   {children = removeBlankNodes($2);
+                                                        children.insert(children.begin(), $1);
+                                                        $$ = createNode("", children);}
+                | declarations                          {$$ = $1;}
+                ;
+
+declarations:   /*headerDecl queueTMult scheduler dispatcher processorMult context
                                                         {children = removeBlankNodes($5);
                                                         children.insert(children.begin(), $4);
                                                         children.insert(children.begin(), $3);
@@ -96,7 +101,13 @@ declarations:   headerDecl queueTMult scheduler dispatcher processorMult context
                                                         children.insert(children.begin(), aux.begin(), aux.end());
                                                         children.insert(children.begin(), $1);
                                                         children.push_back($6);
-                                                        $$ = createNode("", children);}
+                                                        $$ = createNode("", children);}*/
+                headerDecl                              {$$ = $1;}
+                | queueType                             {$$ = $1;}
+                | scheduler                             {$$ = $1;}
+                | dispatcher                            {$$ = $1;}
+                | processorOrType                       {$$ = $1;}
+                | context                               {$$ = $1;}
                 ;
 
 // HEADER START
@@ -112,12 +123,6 @@ headerDecl:     HEADER ID                               {createEntry($2.symbol, 
 // HEADER END
 
 // QUEUE TYPE START
-
-queueTMult:     queueTMult queueType                    {children = removeBlankNodes($2);
-                                                        children.insert(children.begin(), $1);
-                                                        $$ = createNode("", children);}
-                | queueType                             {$$ = $1;}
-                ;
 
     // event id { ... };
 queueType:      EVENT ID                                {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable);
@@ -162,20 +167,14 @@ dispDecl:       ID ARROW OPEN_B processorIds CLOSE_B SEMIC
                                                         $$ = createNode($1.symbol, children);}
                 ;
 
-// DISPATCHER END
-
-// PROCESSOR START
-
 processorIds:   ID COMMA processorIds                   {children = removeBlankNodes($3);
                                                         $$ = createNode($1.symbol, children);}
                 | ID                                    {$$ = createNode($1.symbol, emptyVector);}
                 ;
 
-processorMult:  processorMult processorOrType           {children = removeBlankNodes($2);
-                                                        children.insert(children.begin(), $1);
-                                                        $$ = createNode("", children);}
-                | processorOrType                       {$$ = $1;}
-                ;
+// DISPATCHER END
+
+// PROCESSOR START
 
 processorOrType: structDecl                             {$$ = $1;}
                 | processorDecl                         {$$ = $1;}
@@ -196,19 +195,6 @@ structDecl:     STRUCT_T PROC_OUT_T                     {createEntry($2.symbol, 
                                                         children = removeBlankNodes($5);
                                                         $$ = createNode("structDecl", children);}
                 ;
-
-    // list<event> id;
-/*structMembers:  LIST_T LESSER_OP EVENT_T GREATER_OP ID SEMIC structMembers
-                                                        {children.push_back($7);
-                                                        $$ = createNode($5.symbol, children);}
-                | LIST_T LESSER_OP EVENT_T GREATER_OP ID SEMIC
-                                                        {$$ = createNode($5.symbol, emptyVector);}
-                | LIST_T LESSER_OP PACKET_T GREATER_OP ID SEMIC structMembers
-                                                        {children.push_back($7);
-                                                        $$ = createNode($5.symbol, children);}
-                | LIST_T LESSER_OP PACKET_T GREATER_OP ID SEMIC
-                                                        {$$ = createNode($5.symbol, emptyVector);}
-                ;*/
 
     // proc_out_t id (id id) { ... }
 processorDecl:  PROC_OUT_T ID                           {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable);}
@@ -320,61 +306,19 @@ nextParam:      nextParam COMMA QUEUE_T ID              {$$ = NULL;}
 
 // COMMON GRAMMAR START
 
-/*dropMultStmt:   dropMultStmt dropStmt                   {children.push_back($1);
-                                                        children.push_back($2);
-                                                        $$ = createNode("", children);}
-                | dropStmt                              {$$ = $1;}
-                ;
-
-dropStmt:       dropCondition                           {$$ = $1;}
-                | dropLoop                              {$$ = $1;}
-                | attribution SEMIC                     {$$ = $1;}
-                | return SEMIC                          {$$ = $1;}
-                | varDecl SEMIC                         {$$ = $1;}
-                ;
-*/
-
 comMultStmt:    comMultStmt commonStmt                  {children.push_back($1);
                                                         children.push_back($2);
                                                         $$ = createNode("", children);}
                 | commonStmt                            {$$ = $1;}
                 ;
 
-commonStmt:     conditionDecl                            {$$ = $1;}
+commonStmt:     conditionDecl                           {$$ = $1;}
                 | comLoop                               {$$ = $1;}
                 | dropLoop                              {$$ = $1;}
                 | attribution SEMIC                     {$$ = $1;}
                 | return SEMIC                          {$$ = $1;}
                 | varDecl SEMIC                         {$$ = $1;}
                 ;
-
-    // if ( ... ) { ... }
-    // if ( ... ) { ... } else { ... }
-/*
-dropCondition:   IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B
-                                                        {children.push_back($3);
-                                                        helper = createNode("ifArg", children);
-                                                        children = removeBlankNodes($6);
-                                                        helper2 = createNode("ifStmts", children);
-                                                        children.push_back(helper);
-                                                        children.push_back(helper2);
-                                                        $$ = createNode("if", children);}
-                | IF OPEN_P attribution CLOSE_P OPEN_B dropMultStmt CLOSE_B ELSE OPEN_B dropMultStmt CLOSE_B
-                                                        {children.push_back($3);
-                                                        helper = createNode("ifArg", children);
-                                                        children = removeBlankNodes($6);
-                                                        helper2 = createNode("ifStmts", children);
-                                                        children = removeBlankNodes($10);
-                                                        helper3 = createNode("elseStmts", children);
-                                                        children.push_back(helper);
-                                                        children.push_back(helper2);
-                                                        children.push_back(helper3);
-                                                        $$ = createNode("ifelse", children);}
-                ;
-*/
-
-    // if ( ... ) { ... }
-    // if ( ... ) { ... } else { ... }
 
 conditionDecl:  IF                                      {increaseScope(scopeList, maximumScope);}
                     OPEN_P argCondition comCondition
