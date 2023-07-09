@@ -5,7 +5,7 @@
 bool notDeclared(vector<struct Entry*> & table, string symbol, int scope) {
     for(struct Entry* entry : table) {
         if(entry->symbol == symbol && find(entry->scope.begin(), entry->scope.end(), scope) == entry->scope.end()) {
-            cout << "Sintatic error. Variable " << symbol << " not declared." << scope << endl;
+            cout << "Semantic error. Variable " << symbol << " not declared." << scope << endl;
             //return true;
         }
     }
@@ -15,7 +15,8 @@ bool notDeclared(vector<struct Entry*> & table, string symbol, int scope) {
 bool alreadyDeclared(vector<struct Entry*> & table, string symbol, int scope) {
     for(struct Entry* entry : table) {
         if(entry->symbol == symbol && entry->scope.back() == scope) {
-            cout << "Sintatic error. Variable " << symbol << " already declared in this scope." << endl;
+            cout << "Semantic error. Variable " << symbol << " already declared in this scope.\n"
+            << "Line: " << entry->lineDecl << " Column: " << entry->columnDecl << endl;
             return true;
         }
     }

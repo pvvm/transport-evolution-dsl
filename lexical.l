@@ -26,7 +26,6 @@ SCHEDULER_T     (sched)
 DISPATCH        (dispatch)
 CONTEXT_T       (context)
 PACKET_T        (pkt_t)
-PROC_OUT_T      (proc_out_t)
 
 CONST_INT       [0-9]+
 CONST_FLOAT     ([0-9]*"."[0-9]+)
@@ -91,9 +90,6 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 
 {CONTEXT_T}     {tokenCreator();
                 return CONTEXT_T;}
-
-{PROC_OUT_T}    {tokenCreator();
-                return PROC_OUT_T;}
 
     /* Integer constant */
 {CONST_INT}     {tokenCreator();
@@ -223,12 +219,6 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 
 "pop"           {tokenCreator();
                 return POP;}
-
-"enqueue"       {tokenCreator();
-                return ENQUEUE;}
-
-"next_event"    {tokenCreator();
-                return NEXT_EVENT;}
 
 {ID}            {tokenCreator();
                 return ID;}

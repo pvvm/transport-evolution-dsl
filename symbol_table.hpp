@@ -12,8 +12,12 @@ typedef struct Entry {
     string symbol;
     string type;
     vector<int> scope;
-    int line_decl;
-    int column_decl;
+    int lineDecl;
+    int columnDecl;
+    bool isFunction;
+    int numParameters;
+    vector<string> typeParameters;
+    string whereDeclared;
 }entry;
 
 /*
@@ -39,7 +43,8 @@ int: line where the symbol is located in the inputed code
 int: column where the symbol is located in the inputed code
 vector<struct Entry*>&: the symbol table
 */
-void createEntry(string, string, vector<int>, int, int, vector<struct Entry*> &);
+void createEntry(string, string, vector<int>, int, int,
+vector<struct Entry*> &, bool, int, vector<string>, string);
 
 /*
 Prints the symbol table

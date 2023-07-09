@@ -29,13 +29,18 @@ column: column where the symbol is located in the inputed code
 table: the symbol table
 */
 void createEntry(string symbol, string type, vector<int> scope,
-int line, int column, vector<struct Entry*> & table) {
+int line, int column, vector<struct Entry*> & table, bool isFunction,
+int numParameters, vector<string> typeParameters, string whereDeclared) {
     Entry* entry = new Entry; 
     entry->symbol = symbol;
     entry->type = type;
     entry->scope = scope;
-    entry->line_decl = line;
-    entry->column_decl = column;
+    entry->lineDecl = line;
+    entry->columnDecl = column;
+    entry->isFunction = isFunction;
+    entry->numParameters = numParameters;
+    entry->typeParameters = typeParameters;
+    entry->whereDeclared = whereDeclared;
     table.push_back(entry);
 }
 
@@ -44,28 +49,39 @@ Prints the symbol table
 table: the symbol table
 */
 void printTable(vector<struct Entry*> table) {
-    const int l = 20, total = 101;
+    const int l = 18, total = 163;
 
     cout << setfill('_') << setw(total) << "" << endl;
     cout << "|" << right << setfill(' ') << setw(l) << "Symbol |" << setw(l) << "Type |"
-    << setw(l) << "Scope |" << setw(l) << "Line |" << setw(l) << "Column |" << endl;
+    << setw(l) << "Scope |" << setw(l) << "Line |" << setw(l) << "Column |" 
+    << setw(l) << "Function? |" << setw(l) << "Num param |" << setw(l) << "Type param |"
+    << setw(l) << "Where |" << endl;
     cout << "|" << right << setfill(' ') << setw(l) << "|" << setw(l) << "|"
-    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|" << endl;
+    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"
+    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"<< endl;
 
     string scopeList;
+    string typeList;
     for(struct Entry* entry : table) {
         scopeList = "";
-        for(int scope : entry->scope) {
+        typeList = "";
+        for(auto scope : entry->scope)
             scopeList = scopeList + " " + to_string(scope);
-        }
+        
+        for(auto test : entry->typeParameters)
+            typeList = typeList + " " + test;
+        
         cout << "|" << right << setfill(' ') << setw(l-2) << entry->symbol << " |"
         << setw(l-2) << entry->type << " |" << setw(l-2) << scopeList << " |"
-        << setw(l-2) << entry->line_decl << " |" << setw(l-2) << entry->column_decl
+        << setw(l-2) << entry->lineDecl << " |" << setw(l-2) << entry->columnDecl << " |"
+        << setw(l-2) << entry->isFunction << " |" << setw(l-2) << entry->numParameters << " |"
+        << setw(l-2) << typeList << " |" << setw(l-2) << entry->whereDeclared
         << " |" << endl;
     }
 
     cout << "|" << right << setfill('_') << setw(l) << "|" << setw(l) << "|"
-    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|" << endl;
+    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"
+    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"<< endl;
 }
 
 /*
