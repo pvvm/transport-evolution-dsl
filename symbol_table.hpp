@@ -41,10 +41,22 @@ string: type of the variable, returned value from a function, ...
 vector<int>: list of scopes we are in
 int: line where the symbol is located in the inputed code
 int: column where the symbol is located in the inputed code
-vector<struct Entry*>&: the symbol table
+vector<struct Entry*> &: the symbol table
+string: id of where is declared
 */
 void createEntry(string, string, vector<int>, int, int,
-vector<struct Entry*> &, bool, int, vector<string>, string);
+vector<struct Entry*> &, string);
+
+/*
+Updates function entries with relevant information
+vector<struct Entry*> &: the symbol table
+string: identifier of the entry
+int: present scope
+int: number of parameters
+vector<string>: type of the parameters
+*/
+void updateFunctionEntry(vector<struct Entry*> &, string,
+int, int, vector<string>);
 
 /*
 Prints the symbol table

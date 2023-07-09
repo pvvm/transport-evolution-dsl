@@ -27,21 +27,40 @@ scope: list of scopes we are in
 line: line where the symbol is located in the inputed code
 column: column where the symbol is located in the inputed code
 table: the symbol table
+whereDeclared: symbol of the struct, event, ..., where it's declared
 */
 void createEntry(string symbol, string type, vector<int> scope,
-int line, int column, vector<struct Entry*> & table, bool isFunction,
-int numParameters, vector<string> typeParameters, string whereDeclared) {
+int line, int column, vector<struct Entry*> & table, string whereDeclared) {
     Entry* entry = new Entry; 
     entry->symbol = symbol;
     entry->type = type;
     entry->scope = scope;
     entry->lineDecl = line;
     entry->columnDecl = column;
-    entry->isFunction = isFunction;
-    entry->numParameters = numParameters;
-    entry->typeParameters = typeParameters;
     entry->whereDeclared = whereDeclared;
+    entry->isFunction = false;
+    entry->numParameters = 0;
+    entry->typeParameters = {};
     table.push_back(entry);
+}
+
+/*
+Updates function entries with relevant information
+table: the symbol table
+symbol: identifier of the entry
+scope: present scope
+numParam: number of parameters
+typeParam: type of the parameters
+*/
+void updateFunctionEntry(vector<struct Entry*> & table,
+string symbol, int scope, int numParam, vector<string> typeParam) {
+    for(auto entry : table) {
+        if(entry->symbol == symbol && entry->scope.back() == scope) {
+            entry->isFunction = true;
+            entry->numParameters = numParam;
+            entry->typeParameters = typeParam;
+        }
+    }
 }
 
 /*

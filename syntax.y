@@ -25,6 +25,12 @@ vector<int> scopeList;
 
 // Stores column where a symbol is declared, to be put on the symbol table later
 int columnBeginDecl = 0;
+// Counter for the number of parameters of a function
+int paramCounter = 0;
+// Symbol of the struct/event/header where another symbol was declared
+string whereDeclared = "";
+// List of parameter's type
+vector<string> paramType;
 %}
 
 %code requires {
@@ -79,7 +85,7 @@ program:        multDecl                                {children = removeBlankN
                                                         $$ = createNode("program", children);
                                                         fstream file;
                                                         file.open("tree_result.txt", ios::out);
-                                                        printTree($$, 0, file);
+                                                        //printTree($$, 0, file);
                                                         printTable(symbolTable);
                                                         freeTree($$);
                                                         freeTable(symbolTable);
@@ -93,16 +99,7 @@ multDecl:       multDecl declarations                   {children = removeBlankN
                 | declarations                          {$$ = $1;}
                 ;
 
-declarations:   /*headerDecl queueTMult scheduler dispatcher processorMult context
-                                                        {children = removeBlankNodes($5);
-                                                        children.insert(children.begin(), $4);
-                                                        children.insert(children.begin(), $3);
-                                                        vector<struct Node*> aux = removeBlankNodes($2);
-                                                        children.insert(children.begin(), aux.begin(), aux.end());
-                                                        children.insert(children.begin(), $1);
-                                                        children.push_back($6);
-                                                        $$ = createNode("", children);}*/
-                headerDecl                              {$$ = $1;}
+declarations:   headerDecl                              {$$ = $1;}
                 | queueType                             {$$ = $1;}
                 | scheduler                             {$$ = $1;}
                 | dispatcher                            {$$ = $1;}
@@ -112,10 +109,12 @@ declarations:   /*headerDecl queueTMult scheduler dispatcher processorMult conte
 
 // HEADER START
 
-headerDecl:     HEADER ID                               {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
-                                                        increaseScope(scopeList, maximumScope);}
+headerDecl:     HEADER ID                               {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+                                                        increaseScope(scopeList, maximumScope);
+                                                        whereDeclared = $2.symbol;}
                     OPEN_B contVariables CLOSE_B
                                                         {decreaseScope(scopeList);
+                                                        whereDeclared = "";
                                                         children = removeBlankNodes($5);
                                                         $$ = createNode("headerDecl", children);}
                 ;
@@ -125,16 +124,18 @@ headerDecl:     HEADER ID                               {createEntry($2.symbol, 
 // QUEUE TYPE START
 
     // event id { ... };
-queueType:      EVENT ID                                {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
-                                                        increaseScope(scopeList, maximumScope);}
+queueType:      EVENT ID                                {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+                                                        increaseScope(scopeList, maximumScope);
+                                                        whereDeclared = $2.symbol;}
                     OPEN_B queueTypeDecl CLOSE_B
                                                         {decreaseScope(scopeList);
+                                                        whereDeclared = "";
                                                         children = treeToVector($5);
                                                         $$ = createNode("eventDecl", children);}
                 ;
 
     // int id;
-queueTypeDecl:  types ID                                {createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
+queueTypeDecl:  types ID                                {createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         freeNode($1);}
                     SEMIC queueTypeDecl                 {if($5 != NULL)
                                                             children.push_back($5);
@@ -147,7 +148,7 @@ queueTypeDecl:  types ID                                {createEntry($2.symbol, 
 // DISPATCHER START
 
     // dispatch_table_t id = { ... };
-dispatcher:     DISPATCH ID                             {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
+dispatcher:     DISPATCH ID                             {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         increaseScope(scopeList, maximumScope);}
                     OPEN_B dispMult CLOSE_B
                                                         {decreaseScope(scopeList);
@@ -182,23 +183,25 @@ processorOrType: structDecl                             {$$ = $1;}
 
 // check this later
     // struct proc_out_t { ... }
-structDecl:     /*STRUCT_T PROC_OUT_T                     {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
+structDecl:     /*STRUCT_T PROC_OUT_T                     {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         increaseScope(scopeList, maximumScope);}
                     OPEN_B contVariables CLOSE_B
                                                         {decreaseScope(scopeList);
                                                         children = removeBlankNodes($5);
                                                         $$ = createNode("structDecl", children);}
                 | */
-                STRUCT_T ID OPEN_B                    {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
-                                                        increaseScope(scopeList, maximumScope);}
+                STRUCT_T ID OPEN_B                      {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+                                                        increaseScope(scopeList, maximumScope);
+                                                        whereDeclared = $2.symbol;}
                     contVariables CLOSE_B
                                                         {decreaseScope(scopeList);
+                                                        whereDeclared = "";
                                                         children = removeBlankNodes($5);
                                                         $$ = createNode("structDecl", children);}
                 ;
 
     // proc_out_t id (id id) { ... }
-/*processorDecl:  PROC_OUT_T ID                           {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");}
+/*processorDecl:  PROC_OUT_T ID                           {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);}
                     OPEN_P ID ID COMMA ID ID CLOSE_P
                                                         {increaseScope(scopeList, maximumScope);}
                     OPEN_B comMultStmt CLOSE_B
@@ -213,10 +216,12 @@ structDecl:     /*STRUCT_T PROC_OUT_T                     {createEntry($2.symbol
 // CONTEXT START
 
     // context_t id { ... }
-context:        CONTEXT_T ID                            {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
-                                                        increaseScope(scopeList, maximumScope);}
+context:        CONTEXT_T ID                            {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+                                                        increaseScope(scopeList, maximumScope);
+                                                        whereDeclared = $2.symbol;}
                     OPEN_B contVariables CLOSE_B
                                                         {decreaseScope(scopeList);
+                                                        whereDeclared = "";
                                                         children = removeBlankNodes($5);
                                                         $$ = createNode("contextDecl", children);}
                 ;
@@ -233,7 +238,7 @@ contVariables:  varDecl SEMIC contVariables             {children = removeBlankN
 // SCHEDULER START
 
     // scheduler_t id { ... }
-scheduler:      SCHEDULER_T ID                          {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
+scheduler:      SCHEDULER_T ID                          {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         increaseScope(scopeList, maximumScope);}
                     OPEN_B queues /*nextEvent*/ comFunction CLOSE_B
                                                         {decreaseScope(scopeList);
@@ -258,7 +263,7 @@ queueAndDrop:   /*dropDecl*/comFunction                 {children.push_back($1);
                 ;
 
     // queue_t<id> id (const, const, id); 
-queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID      {createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");}
+queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID      {createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);}
                     OPEN_P CONST_INT COMMA CONST_INT COMMA ID CLOSE_P SEMIC
                                                         {helper = createNode($5.symbol, emptyVector);
                                                         children.push_back(helper);
@@ -266,7 +271,7 @@ queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID      {createEntry($5.symbol, 
                 ;
 
     // int id (queue_t id, id id) { ... }
-/*dropDecl:       INT_T ID                                {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");}
+/*dropDecl:       INT_T ID                                {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);}
                     OPEN_P QUEUE_T ID COMMA ID ID CLOSE_P
                                                         {increaseScope(scopeList, maximumScope);}
                     OPEN_B /*dropMultStmt comMultStmt CLOSE_B
@@ -282,7 +287,7 @@ queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID      {createEntry($5.symbol, 
 
     // bool enqueue (event id) { ... }
 /*
-enquDecl:       BOOL_T ENQUEUE                          {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");}
+enquDecl:       BOOL_T ENQUEUE                          {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);}
                     OPEN_P EVENT ID CLOSE_P             {increaseScope(scopeList, maximumScope);}
                     OPEN_B comMultStmt CLOSE_B
                                                         {decreaseScope(scopeList);
@@ -292,7 +297,7 @@ enquDecl:       BOOL_T ENQUEUE                          {createEntry($2.symbol, 
 */
 
     // event_t next_event () { ... }
-/*nextEvent:      EVENT_T NEXT_EVENT                      {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");}
+/*nextEvent:      EVENT_T NEXT_EVENT                      {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);}
                     OPEN_P nextParam CLOSE_P
                                                         {increaseScope(scopeList, maximumScope);}
                     OPEN_B comMultStmt CLOSE_B
@@ -312,19 +317,20 @@ nextParam:      nextParam COMMA QUEUE_T ID              {$$ = NULL;}
 
 // COMMON GRAMMAR START
 
-comFunction:    types ID                                {increaseScope(scopeList, maximumScope);}
-                    OPEN_P argsOrNot CLOSE_P OPEN_B comMultStmt CLOSE_B
-                                                        {decreaseScope(scopeList);
-                                                        createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
+comFunction:    types ID                                {createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+                                                        increaseScope(scopeList, maximumScope);
+                                                        paramType.clear();}
+                    OPEN_P argsOrNot CLOSE_P            {updateFunctionEntry(symbolTable, $2.symbol, scopeList.end()[-2], paramCounter, paramType);}
+                    OPEN_B comMultStmt CLOSE_B          {decreaseScope(scopeList);
+                                                        paramCounter = 0;
                                                         freeNode($1);
                                                         /*children = removeBlankNodes($4);
-                                                        helper = createNode("funcArgs", children);*/
-                                                        children = removeBlankNodes($8);
+                                                        helper2 = createNode("funcArgs", children);*/
+                                                        children = removeBlankNodes($9);
                                                         helper = createNode("funcStmts", children);
                                                         children.push_back(helper);
                                                         //children.push_back(helper2);
-                                                        $$ = createNode($2.symbol, children);
-                                                        }
+                                                        $$ = createNode($2.symbol, children);}
                 ;
 
 argsOrNot:      funcArgs                                {$$ = NULL;}
@@ -334,11 +340,18 @@ argsOrNot:      funcArgs                                {$$ = NULL;}
 funcArgs:       funcArgs COMMA varDecl                  {/*children = removeBlankNodes($1);
                                                         children.push_back($3);
                                                         $$ = createNode("", children);*/
+                                                        paramCounter++;
+                                                        freeNode($3);
                                                         $$ = NULL;}
                 | varDecl                               {/*$$ = $1;*/
+
+                                                        freeNode($1);
+                                                        paramCounter++;
+
                                                         $$ = NULL;}
                 // Used in drop functions
-                | EVENT ID                               {$$ = NULL;}
+                | EVENT ID                              {paramCounter++;
+                                                        $$ = NULL;}
                 ;
 
 comMultStmt:    comMultStmt commonStmt                  {children.push_back($1);
@@ -441,14 +454,16 @@ return:         RETURN attribution                      {children.push_back($2);
                 ;
 
 varDecl:        types ID                                {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
-                                                            cout << "OI";
-                                                        createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
+                                                            YYABORT;
+                                                        createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+                                                        paramType.push_back($1->symbol);
                                                         freeNode($1);
                                                         $$ = createNode($2.symbol, emptyVector);}
                 | types ID                              {columnBeginDecl = yylval.token.columnBegin;}
                     ATTRIB_OP attribution               {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
-                                                            cout << "OI";
-                                                        createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, columnBeginDecl, symbolTable, false, 0, {"test"}, "seu cu");
+                                                            YYABORT;
+                                                        createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, columnBeginDecl, symbolTable, whereDeclared);
+                                                        paramType.push_back($1->symbol);
                                                         freeNode($1);
                                                         helper = createNode($2.symbol, emptyVector);
                                                         children.push_back(helper);
@@ -456,13 +471,14 @@ varDecl:        types ID                                {if(alreadyDeclared(symb
                                                         $$ = createNode($4.symbol, children);}
                 | LIST_T LESSER_OP types GREATER_OP ID
                                                         {if(alreadyDeclared(symbolTable, $5.symbol, scopeList.back()))
-                                                            cout << "OI";
-                                                        createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
+                                                            YYABORT;
+                                                        createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+                                                        paramType.push_back($1.symbol);
                                                         freeNode($3);
                                                         $$ = createNode($5.symbol, emptyVector);}
-                /*| PROC_OUT_T ID                         {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
-                                                            cout << "OI";
-                                                        createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, false, 0, {"test"}, "seu cu");
+                /*| PROC_OUT_T ID                       {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
+                                                            YYABORT;
+                                                        createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         $$ = createNode($2.symbol, emptyVector);}*/
                 ;
 
