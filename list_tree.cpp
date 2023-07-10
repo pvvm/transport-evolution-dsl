@@ -6,9 +6,10 @@ Returns: pointer to new node
 symbol: symbol of the node
 child: address of children vector
 */
-struct Node* createNode(string symbol, vector<struct Node*>& child) {
+struct Node* createNode(string symbol, string type, vector<struct Node*>& child) {
     Node* node = new Node;
     node->symbol = symbol;
+    node->type = type;
     node->children = child;
 
     child.clear();

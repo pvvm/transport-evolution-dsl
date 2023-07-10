@@ -3,8 +3,12 @@
 
 #include "symbol_table.hpp"
 
-bool notDeclared(vector<struct Entry*> &, string, int);
+bool noEventDispatcher(vector<struct Entry*>, string, int, int);
 
-bool alreadyDeclared(vector<struct Entry*> &, string, int);
+bool noProcDispatcher(vector<struct Entry*>, string, int, int);
+
+bool notDeclared(vector<struct Entry*>, string, vector<int>, int, int);
+
+bool alreadyDeclared(vector<struct Entry*>, string, int);
 
 #endif

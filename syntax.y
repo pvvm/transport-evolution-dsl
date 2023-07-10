@@ -20,17 +20,19 @@ struct Node * helper2;
 struct Node * helper3;
 struct Node * helper4;
 
+// Variables used to construct the symbol table
 int maximumScope = 0;
 vector<int> scopeList;
-
 // Stores column where a symbol is declared, to be put on the symbol table later
 int columnBeginDecl = 0;
 // Counter for the number of parameters of a function
 int paramCounter = 0;
 // Symbol of the struct/event/header where another symbol was declared
 string whereDeclared = "";
-// List of parameter's type
+// List of parameter type
 vector<string> paramType;
+
+
 %}
 
 %code requires {
@@ -75,6 +77,7 @@ TO DO:
 
 FIX GET_HDR<>. IT IS CONSIDERING THEY ARE OPERATORS < AND >
 
+CHANGE HOW EVENT AS A FUNCTION PARAMETER IS IMPLEMENTED
 */
 
 %start program
@@ -82,7 +85,7 @@ FIX GET_HDR<>. IT IS CONSIDERING THEY ARE OPERATORS < AND >
 %%
 
 program:        multDecl                                {children = removeBlankNodes($1);
-                                                        $$ = createNode("program", children);
+                                                        $$ = createNode("program", "test", children);
                                                         fstream file;
                                                         file.open("tree_result.txt", ios::out);
                                                         //printTree($$, 0, file);
@@ -95,7 +98,7 @@ program:        multDecl                                {children = removeBlankN
 
 multDecl:       multDecl declarations                   {children = removeBlankNodes($2);
                                                         children.insert(children.begin(), $1);
-                                                        $$ = createNode("", children);}
+                                                        $$ = createNode("", "test", children);}
                 | declarations                          {$$ = $1;}
                 ;
 
@@ -110,13 +113,13 @@ declarations:   headerDecl                              {$$ = $1;}
 // HEADER START
 
 headerDecl:     HEADER ID                               {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
-                                                        increaseScope(scopeList, maximumScope);
+                                                        //increaseScope(scopeList, maximumScope);
                                                         whereDeclared = $2.symbol;}
                     OPEN_B contVariables CLOSE_B
-                                                        {decreaseScope(scopeList);
+                                                        {//decreaseScope(scopeList);
                                                         whereDeclared = "";
                                                         children = removeBlankNodes($5);
-                                                        $$ = createNode("headerDecl", children);}
+                                                        $$ = createNode("headerDecl", "test", children);}
                 ;
 
 // HEADER END
@@ -125,13 +128,13 @@ headerDecl:     HEADER ID                               {createEntry($2.symbol, 
 
     // event id { ... };
 queueType:      EVENT ID                                {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
-                                                        increaseScope(scopeList, maximumScope);
+                                                        //increaseScope(scopeList, maximumScope);
                                                         whereDeclared = $2.symbol;}
                     OPEN_B queueTypeDecl CLOSE_B
-                                                        {decreaseScope(scopeList);
+                                                        {//decreaseScope(scopeList);
                                                         whereDeclared = "";
                                                         children = treeToVector($5);
-                                                        $$ = createNode("eventDecl", children);}
+                                                        $$ = createNode("eventDecl", "test", children);}
                 ;
 
     // int id;
@@ -139,7 +142,7 @@ queueTypeDecl:  types ID                                {createEntry($2.symbol, 
                                                         freeNode($1);}
                     SEMIC queueTypeDecl                 {if($5 != NULL)
                                                             children.push_back($5);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | /* empty */                           {$$ = NULL;}
                 ;
 
@@ -149,28 +152,35 @@ queueTypeDecl:  types ID                                {createEntry($2.symbol, 
 
     // dispatch_table_t id = { ... };
 dispatcher:     DISPATCH ID                             {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
-                                                        increaseScope(scopeList, maximumScope);}
+                                                        //increaseScope(scopeList, maximumScope);
+                                                        }
                     OPEN_B dispMult CLOSE_B
-                                                        {decreaseScope(scopeList);
+                                                        {//decreaseScope(scopeList);
                                                         children = removeBlankNodes($5);
-                                                        $$ = createNode("dispatcherDecl", children);}
+                                                        $$ = createNode("dispatcherDecl", "test", children);}
                 ;
 
 dispMult:       dispMult dispDecl                       {children.push_back($1);
                                                         children.push_back($2);
-                                                        $$ = createNode("", children);}
+                                                        $$ = createNode("", "test", children);}
                 | dispDecl                              {$$ = $1;}
                 ;
 
     // id -> {...};
 dispDecl:       ID ARROW OPEN_B processorIds CLOSE_B SEMIC
-                                                        {children = treeToVector($4);
-                                                        $$ = createNode($1.symbol, children);}
+                                                        {if(noEventDispatcher(symbolTable, $1.symbol, yylval.token.line, yylval.token.column))
+                                                            YYABORT;
+                                                        children = treeToVector($4);
+                                                        $$ = createNode($1.symbol, "test", children);}
                 ;
 
-processorIds:   ID COMMA processorIds                   {children = removeBlankNodes($3);
-                                                        $$ = createNode($1.symbol, children);}
-                | ID                                    {$$ = createNode($1.symbol, emptyVector);}
+processorIds:   ID COMMA processorIds                   {if(noProcDispatcher(symbolTable, $1.symbol, yylval.token.line, yylval.token.column))
+                                                            YYABORT;
+                                                        children = removeBlankNodes($3);
+                                                        $$ = createNode($1.symbol, "test", children);}
+                | ID                                    {if(noProcDispatcher(symbolTable, $1.symbol, yylval.token.line, yylval.token.columnBegin))
+                                                            YYABORT;
+                                                        $$ = createNode($1.symbol, "test", emptyVector);}
                 ;
 
 // DISPATCHER END
@@ -188,16 +198,16 @@ structDecl:     /*STRUCT_T PROC_OUT_T                     {createEntry($2.symbol
                     OPEN_B contVariables CLOSE_B
                                                         {decreaseScope(scopeList);
                                                         children = removeBlankNodes($5);
-                                                        $$ = createNode("structDecl", children);}
+                                                        $$ = createNode("structDecl", "test", children);}
                 | */
                 STRUCT_T ID OPEN_B                      {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
-                                                        increaseScope(scopeList, maximumScope);
+                                                        //increaseScope(scopeList, maximumScope);
                                                         whereDeclared = $2.symbol;}
                     contVariables CLOSE_B
-                                                        {decreaseScope(scopeList);
+                                                        {//decreaseScope(scopeList);
                                                         whereDeclared = "";
                                                         children = removeBlankNodes($5);
-                                                        $$ = createNode("structDecl", children);}
+                                                        $$ = createNode("structDecl", "test", children);}
                 ;
 
     // proc_out_t id (id id) { ... }
@@ -207,7 +217,7 @@ structDecl:     /*STRUCT_T PROC_OUT_T                     {createEntry($2.symbol
                     OPEN_B comMultStmt CLOSE_B
                                                         {decreaseScope(scopeList);
                                                         children = removeBlankNodes($13);
-                                                        $$ = createNode("processorDecl", children);}
+                                                        $$ = createNode("processorDecl", "test", children);}
                 ;
 */
 
@@ -217,20 +227,20 @@ structDecl:     /*STRUCT_T PROC_OUT_T                     {createEntry($2.symbol
 
     // context_t id { ... }
 context:        CONTEXT_T ID                            {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
-                                                        increaseScope(scopeList, maximumScope);
+                                                        //increaseScope(scopeList, maximumScope);
                                                         whereDeclared = $2.symbol;}
                     OPEN_B contVariables CLOSE_B
-                                                        {decreaseScope(scopeList);
+                                                        {//decreaseScope(scopeList);
                                                         whereDeclared = "";
                                                         children = removeBlankNodes($5);
-                                                        $$ = createNode("contextDecl", children);}
+                                                        $$ = createNode("contextDecl", "test", children);}
                 ;
 
     // int id;
 contVariables:  varDecl SEMIC contVariables             {children = removeBlankNodes($3);
                                                         children.insert(children.begin(), $1);
-                                                        $$ = createNode("", children);}
-                | /* empty */                           {$$ = createNode("", emptyVector);}
+                                                        $$ = createNode("", "test", children);}
+                | /* empty */                           {$$ = createNode("", "test", emptyVector);}
                 ;
 
 // CONTEXT END
@@ -244,30 +254,30 @@ scheduler:      SCHEDULER_T ID                          {createEntry($2.symbol, 
                                                         {decreaseScope(scopeList);
                                                         children = removeBlankNodes($5);
                                                         children.push_back($6);
-                                                        $$ = createNode("schedulerDecl", children);}
+                                                        $$ = createNode("schedulerDecl", "test", children);}
                 ;
 
 // QUEUE START
 
 queues:         queues queueAndDrop                     {children = removeBlankNodes($2);
                                                         children.insert(children.begin(), $1);
-                                                        $$ = createNode("", children);}
+                                                        $$ = createNode("", "test", children);}
                 | queueAndDrop                          {$$ = $1;}
                 ;
 
 queueAndDrop:   /*dropDecl*/comFunction                 {children.push_back($1);
-                                                        $$ = createNode("", children);}
+                                                        $$ = createNode("", "test", children);}
                 | queueDecl                             {children.push_back($1);
-                                                        $$ = createNode("", children);}
+                                                        $$ = createNode("", "test", children);}
                 //| enquDecl
                 ;
 
     // queue_t<id> id (const, const, id); 
 queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID      {createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);}
                     OPEN_P CONST_INT COMMA CONST_INT COMMA ID CLOSE_P SEMIC
-                                                        {helper = createNode($5.symbol, emptyVector);
+                                                        {helper = createNode($5.symbol, "test", emptyVector);
                                                         children.push_back(helper);
-                                                        $$ = createNode("queueDecl", children);}
+                                                        $$ = createNode("queueDecl", "test", children);}
                 ;
 
     // int id (queue_t id, id id) { ... }
@@ -277,7 +287,7 @@ queueDecl:      QUEUE_T LESSER_OP ID GREATER_OP ID      {createEntry($5.symbol, 
                     OPEN_B /*dropMultStmt comMultStmt CLOSE_B
                                                         {decreaseScope(scopeList);
                                                         children = removeBlankNodes($13);
-                                                        $$ = createNode("dropDecl", children);}
+                                                        $$ = createNode("dropDecl", "test", children);}
                 ;
 */
 
@@ -292,7 +302,7 @@ enquDecl:       BOOL_T ENQUEUE                          {createEntry($2.symbol, 
                     OPEN_B comMultStmt CLOSE_B
                                                         {decreaseScope(scopeList);
                                                         children = removeBlankNodes($10);
-                                                        $$ = createNode("enqueueDecl", children);}
+                                                        $$ = createNode("enqueueDecl", "test", children);}
                 ;
 */
 
@@ -303,7 +313,7 @@ enquDecl:       BOOL_T ENQUEUE                          {createEntry($2.symbol, 
                     OPEN_B comMultStmt CLOSE_B
                                                         {decreaseScope(scopeList);
                                                         children = removeBlankNodes($9);
-                                                        $$ = createNode("nextEventDecl", children);}
+                                                        $$ = createNode("nextEventDecl", "test", children);}
                 ;
 
 nextParam:      nextParam COMMA QUEUE_T ID              {$$ = NULL;}
@@ -325,12 +335,12 @@ comFunction:    types ID                                {createEntry($2.symbol, 
                                                         paramCounter = 0;
                                                         freeNode($1);
                                                         /*children = removeBlankNodes($4);
-                                                        helper2 = createNode("funcArgs", children);*/
+                                                        helper2 = createNode("funcArgs", "test", children);*/
                                                         children = removeBlankNodes($9);
-                                                        helper = createNode("funcStmts", children);
+                                                        helper = createNode("funcStmts", "test", children);
                                                         children.push_back(helper);
                                                         //children.push_back(helper2);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 ;
 
 argsOrNot:      funcArgs                                {$$ = NULL;}
@@ -339,24 +349,27 @@ argsOrNot:      funcArgs                                {$$ = NULL;}
 
 funcArgs:       funcArgs COMMA varDecl                  {/*children = removeBlankNodes($1);
                                                         children.push_back($3);
-                                                        $$ = createNode("", children);*/
+                                                        $$ = createNode("", "test", children);*/
                                                         paramCounter++;
                                                         freeNode($3);
                                                         $$ = NULL;}
                 | varDecl                               {/*$$ = $1;*/
-
                                                         freeNode($1);
                                                         paramCounter++;
-
-                                                        $$ = NULL;}
+                                                        $$ = NULL;
+                                                        }
                 // Used in drop functions
-                | EVENT ID                              {paramCounter++;
+                | EVENT ID                              {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+                                                        paramCounter++;
+                                                        $$ = NULL;}
+                | funcArgs COMMA EVENT ID               {createEntry($4.symbol, $3.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+                                                        paramCounter++;
                                                         $$ = NULL;}
                 ;
 
 comMultStmt:    comMultStmt commonStmt                  {children.push_back($1);
                                                         children.push_back($2);
-                                                        $$ = createNode("", children);}
+                                                        $$ = createNode("", "test", children);}
                 | commonStmt                            {$$ = $1;}
                 ;
 
@@ -371,12 +384,12 @@ commonStmt:     conditionDecl                           {$$ = $1;}
 conditionDecl:  IF                                      {increaseScope(scopeList, maximumScope);}
                     OPEN_P argCondition comCondition
                                                         {children.push_back($4);
-                                                        helper = createNode("ifArg", children);
+                                                        helper = createNode("ifArg", "test", children);
                                                         children.push_back(helper);
                                                         vector<struct Node*> aux = removeBlankNodes($5);
                                                         for(auto node : aux)
                                                             children.push_back(node);
-                                                        $$ = createNode("if", children);}
+                                                        $$ = createNode("if", "test", children);}
                 ;
 
 argCondition:   varDecl                                 {$$ = $1;}
@@ -386,21 +399,21 @@ argCondition:   varDecl                                 {$$ = $1;}
 comCondition:   CLOSE_P bracketsOrNot
                                                         {decreaseScope(scopeList);
                                                         children = removeBlankNodes($2);
-                                                        helper = createNode("then", children);
+                                                        helper = createNode("then", "test", children);
                                                         children.push_back(helper);
-                                                        $$ = createNode("", children);}
+                                                        $$ = createNode("", "test", children);}
 
                 | CLOSE_P bracketsOrNot ELSE            {decreaseScope(scopeList);
                                                         increaseScope(scopeList, maximumScope);}
                     bracketsOrNot      
                                                         {decreaseScope(scopeList);
                                                         children = removeBlankNodes($2);
-                                                        helper = createNode("then", children);
+                                                        helper = createNode("then", "test", children);
                                                         children = removeBlankNodes($5);
-                                                        helper2 = createNode("else", children);
+                                                        helper2 = createNode("else", "test", children);
                                                         children.push_back(helper);
                                                         children.push_back(helper2);
-                                                        $$ = createNode("", children);}
+                                                        $$ = createNode("", "test", children);}
                 ;
 
     // foreach id in id { ... }
@@ -408,14 +421,14 @@ dropLoop:       FOREACH                                 {increaseScope(scopeList
                     OPEN_P ID IN idVariations CLOSE_P bracketsOrNot
                                                         {decreaseScope(scopeList);
                                                         children = removeBlankNodes($8);
-                                                        helper = createNode("loopStmts", children);
-                                                        helper2 = createNode($4.symbol, emptyVector);
+                                                        helper = createNode("loopStmts", "test", children);
+                                                        helper2 = createNode($4.symbol, "test", emptyVector);
                                                         children.push_back(helper2);
                                                         children.push_back($6);
-                                                        helper4 = createNode("loopArgs", children);
+                                                        helper4 = createNode("loopArgs", "test", children);
                                                         children.push_back(helper4);
                                                         children.push_back(helper);
-                                                        $$ = createNode("foreach", children);}
+                                                        $$ = createNode("foreach", "test", children);}
                 ;
 
     // for ( ... ) { ... }
@@ -423,10 +436,10 @@ comLoop:        FOR                                     {increaseScope(scopeList
                     OPEN_P loopArgs CLOSE_P bracketsOrNot
                                                         {decreaseScope(scopeList);
                                                         children = removeBlankNodes($6);
-                                                        helper = createNode("loopStmts", children);
+                                                        helper = createNode("loopStmts", "test", children);
                                                         children.push_back($4);
                                                         children.push_back(helper);
-                                                        $$ = createNode("for", children);}
+                                                        $$ = createNode("for", "test", children);}
                 ;
 
 bracketsOrNot:  OPEN_B comMultStmt CLOSE_B              {$$ = $2;}
@@ -437,20 +450,20 @@ loopArgs:       firstArgument SEMIC argument SEMIC argument
                                                         {children.push_back($1);
                                                         children.push_back($3);
                                                         children.push_back($5);
-                                                        $$ = createNode("loopArgs", children);}
+                                                        $$ = createNode("loopArgs", "test", children);}
                 ;
 
 firstArgument:  varDecl                                 {$$ = $1;}
                 | attribution                           {$$ = $1;}
-                | /* empty */                           {$$ = createNode("empty", emptyVector);}
+                | /* empty */                           {$$ = createNode("empty", "test", emptyVector);}
                 ;
 
 argument:       attribution                             {$$ = $1;}
-                | /* empty */                           {$$ = createNode("empty", emptyVector);}
+                | /* empty */                           {$$ = createNode("empty", "test", emptyVector);}
                 ;
 
 return:         RETURN attribution                      {children.push_back($2);
-                                                        $$ = createNode($1.symbol, children);}
+                                                        $$ = createNode($1.symbol, "test", children);}
                 ;
 
 varDecl:        types ID                                {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
@@ -458,182 +471,182 @@ varDecl:        types ID                                {if(alreadyDeclared(symb
                                                         createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         paramType.push_back($1->symbol);
                                                         freeNode($1);
-                                                        $$ = createNode($2.symbol, emptyVector);}
+                                                        $$ = createNode($2.symbol, "test", emptyVector);}
                 | types ID                              {columnBeginDecl = yylval.token.columnBegin;}
                     ATTRIB_OP attribution               {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
                                                             YYABORT;
                                                         createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, columnBeginDecl, symbolTable, whereDeclared);
                                                         paramType.push_back($1->symbol);
                                                         freeNode($1);
-                                                        helper = createNode($2.symbol, emptyVector);
+                                                        helper = createNode($2.symbol, "test", emptyVector);
                                                         children.push_back(helper);
                                                         children.push_back($5);
-                                                        $$ = createNode($4.symbol, children);}
+                                                        $$ = createNode($4.symbol, "test", children);}
                 | LIST_T LESSER_OP types GREATER_OP ID
                                                         {if(alreadyDeclared(symbolTable, $5.symbol, scopeList.back()))
                                                             YYABORT;
                                                         createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         paramType.push_back($1.symbol);
                                                         freeNode($3);
-                                                        $$ = createNode($5.symbol, emptyVector);}
+                                                        $$ = createNode($5.symbol, "test", emptyVector);}
                 /*| PROC_OUT_T ID                       {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
                                                             YYABORT;
                                                         createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
-                                                        $$ = createNode($2.symbol, emptyVector);}*/
+                                                        $$ = createNode($2.symbol, "test", emptyVector);}*/
                 ;
 
-types:          INT_T                                   {$$ = createNode($1.symbol, emptyVector);}
-                | FLOAT_T                               {$$ = createNode($1.symbol, emptyVector);}
-                | STREAM_T                              {$$ = createNode($1.symbol, emptyVector);}
-                | ID                                    {$$ = createNode($1.symbol, emptyVector);}
-                | BOOL_T                                {$$ = createNode($1.symbol, emptyVector);}
-                | EVENT_T                               {$$ = createNode($1.symbol, emptyVector);}
-                | PACKET_T                              {$$ = createNode($1.symbol, emptyVector);}
-                | QUEUE_T                               {$$ = createNode($1.symbol, emptyVector);}
+types:          INT_T                                   {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
+                | FLOAT_T                               {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
+                | STREAM_T                              {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
+                | ID                                    {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
+                | BOOL_T                                {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
+                | EVENT_T                               {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
+                | PACKET_T                              {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
+                | QUEUE_T                               {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
                 ;
 
 attribution:    idVariations ATTRIB_OP attribution      {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | logicalOr                             {$$ = $1;}
                 ;
 
 logicalOr:      logicalOr LOGIC_OR_OP logicalAnd        {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | logicalAnd                            {$$ = $1;}
                 ;
 
 logicalAnd:     logicalAnd LOGIC_AND_OP compareExp      {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | compareExp                            {$$ = $1;}
                 ;
 
 compareExp:     compareExp RELAT_LOW_OP relationExp     {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | relationExp                           {$$ = $1;}
                 ;
 
 relationExp:    relationExp GREATER_OP lowMathExp       {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | relationExp LESSER_OP lowMathExp      {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | relationExp RELAT_HIGH_OP lowMathExp  {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | lowMathExp                            {$$ = $1;}
                 ;
 
 lowMathExp:     lowMathExp MATH_ADD_OP highMathExp      {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | lowMathExp MATH_SUB_OP highMathExp    {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | highMathExp                           {$$ = $1;}
                 ;
 
 highMathExp:    highMathExp MATH_HIGH_OP unaryExp       {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | unaryExp                              {$$ = $1;}
                 ;
 
 
 unaryExp:       LOGIC_NOT_OP unaryExp                   {children.push_back($2);
-                                                        $$ = createNode($1.symbol, children);}
+                                                        $$ = createNode($1.symbol, "test", children);}
                 | MATH_SUB_OP unaryExp                  {children.push_back($2);
-                                                        $$ = createNode($1.symbol, children);}
+                                                        $$ = createNode($1.symbol, "test", children);}
                 | TYPE OPEN_P unaryExp CLOSE_P          {children.push_back($3);
-                                                        $$ = createNode($1.symbol, children);}
+                                                        $$ = createNode($1.symbol, "test", children);}
                 | BYTES OPEN_P unaryExp CLOSE_P         {children.push_back($3);
-                                                        $$ = createNode($1.symbol, children);}
+                                                        $$ = createNode($1.symbol, "test", children);}
                 | element                               {$$ = $1;}
                 ;
 
 element:        idVariations                            {$$ = $1;}
-                | CONST_INT                             {$$ = createNode($1.symbol, emptyVector);}
-                | CONST_FLOAT                           {$$ = createNode($1.symbol, emptyVector);}
-                | FALSE                                 {$$ = createNode($1.symbol, emptyVector);}
-                | TRUE                                  {$$ = createNode($1.symbol, emptyVector);}
+                | CONST_INT                             {$$ = createNode($1.symbol, "test", emptyVector);}
+                | CONST_FLOAT                           {$$ = createNode($1.symbol, "test", emptyVector);}
+                | FALSE                                 {$$ = createNode($1.symbol, "test", emptyVector);}
+                | TRUE                                  {$$ = createNode($1.symbol, "test", emptyVector);}
                 | OPEN_P attribution CLOSE_P            {$$ = $2;}
-                | TIME OPEN_P CLOSE_P                   {$$ = createNode($1.symbol, emptyVector);}
-                | TIMER DOT timerOps OPEN_P CLOSE_P     {helper = createNode($1.symbol, emptyVector);
+                | TIME OPEN_P CLOSE_P                   {$$ = createNode($1.symbol, "test", emptyVector);}
+                | TIMER DOT timerOps OPEN_P CLOSE_P     {helper = createNode($1.symbol, "test", emptyVector);
                                                         children.push_back(helper);
-                                                        helper2 = createNode($3->symbol, emptyVector);
+                                                        helper2 = createNode($3->symbol, "test", emptyVector);
                                                         children.push_back(helper2);
-                                                        $$ = createNode($2.symbol, children);}
-                | NEW_PKT OPEN_P CLOSE_P                {$$ = createNode($1.symbol, emptyVector);}
+                                                        $$ = createNode($2.symbol, "test", children);}
+                | NEW_PKT OPEN_P CLOSE_P                {$$ = createNode($1.symbol, "test", emptyVector);}
                 ;
 
-timerOps:       SET_DURATION                            {$$ = createNode($1.symbol, emptyVector);}
-                | START                                 {$$ = createNode($1.symbol, emptyVector);}
-                | STOP                                  {$$ = createNode($1.symbol, emptyVector);}
-                | RESTART                               {$$ = createNode($1.symbol, emptyVector);}
+timerOps:       SET_DURATION                            {$$ = createNode($1.symbol, "test", emptyVector);}
+                | START                                 {$$ = createNode($1.symbol, "test", emptyVector);}
+                | STOP                                  {$$ = createNode($1.symbol, "test", emptyVector);}
+                | RESTART                               {$$ = createNode($1.symbol, "test", emptyVector);}
                 ;
 
 idVariations:   idVariations DOT squareBrackets         {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | idVariations DOT builtInFunc OPEN_P CLOSE_P
                                                         {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | idVariations DOT builtInFunc OPEN_P attribution CLOSE_P
                                                         {children.push_back($5);
-                                                        helper = createNode($3->symbol, children);
+                                                        helper = createNode($3->symbol, "test", children);
                                                         freeNode($3);
                                                         children.push_back($1);
                                                         children.push_back(helper);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | idVariations DOT builtInFunc LESSER_OP ID GREATER_OP OPEN_P CLOSE_P
-                                                        {helper = createNode($5.symbol, emptyVector);
-                                                        helper2 = createNode($3->symbol, children);
+                                                        {helper = createNode($5.symbol, "test", emptyVector);
+                                                        helper2 = createNode($3->symbol, "test", children);
                                                         freeNode($3);
                                                         children.push_back($1);
                                                         children.push_back(helper2);
                                                         children.push_back(helper);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | idVariations ARROW squareBrackets     {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | squareBrackets                        {$$ = $1;}
                 ;
 
                 // id.add(...)
-builtInFunc:    ADD                                     {$$ = createNode($1.symbol, emptyVector);}
+builtInFunc:    ADD                                     {$$ = createNode($1.symbol, "test", emptyVector);}
                 // id.add_hdr(...)
-                | ADD_HDR                               {$$ = createNode($1.symbol, emptyVector);}
+                | ADD_HDR                               {$$ = createNode($1.symbol, "test", emptyVector);}
                 // id.get_hdr<id>()
-                | GET_HDR                               {$$ = createNode($1.symbol, emptyVector);}
+                | GET_HDR                               {$$ = createNode($1.symbol, "test", emptyVector);}
                 // id.add_data(...)
-                | ADD_DATA                              {$$ = createNode($1.symbol, emptyVector);}
+                | ADD_DATA                              {$$ = createNode($1.symbol, "test", emptyVector);}
                 // id.get_data()
-                | GET_DATA                              {$$ = createNode($1.symbol, emptyVector);}
+                | GET_DATA                              {$$ = createNode($1.symbol, "test", emptyVector);}
                 // id.push(...)
-                | PUSH                                  {$$ = createNode($1.symbol, emptyVector);}
+                | PUSH                                  {$$ = createNode($1.symbol, "test", emptyVector);}
                 // id.pop()
-                | POP                                   {$$ = createNode($1.symbol, emptyVector);}
+                | POP                                   {$$ = createNode($1.symbol, "test", emptyVector);}
                 // id.length()
-                | LENGTH                                {$$ = createNode($1.symbol, emptyVector);}
+                | LENGTH                                {$$ = createNode($1.symbol, "test", emptyVector);}
                 ;
 
 squareBrackets: squareBrackets OPEN_S sliceExp CLOSE_S
                                                         {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode("[]", children);}
-                | ID                                    {//if(notDeclared(symbolTable, $1.symbol, scopeList.back()))
-                                                        //    cout << "OI";;
-                                                        $$ = createNode($1.symbol, emptyVector);}
+                                                        $$ = createNode("[]", "test", children);}
+                | ID                                    {if(notDeclared(symbolTable, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin))
+                                                            YYABORT;
+                                                        $$ = createNode($1.symbol, "test", emptyVector);}
                 ;
 
 sliceExp:       sliceExp SLICE_OP logicalOr             {children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, children);}
+                                                        $$ = createNode($2.symbol, "test", children);}
                 | logicalOr                             {$$ = $1;}
                 ;
 

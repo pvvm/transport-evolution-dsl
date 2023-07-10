@@ -1,21 +1,41 @@
 #include "semantic.hpp"
 
-// We need to make the "spread" the scope of struct-like instruction variables
-// ex: an element in send_queue must be able to send_queue.time_event, even if time_event was described in SEND scope
-bool notDeclared(vector<struct Entry*> & table, string symbol, int scope) {
+
+bool noEventDispatcher(vector<struct Entry*> table, string symbol, int line, int column) {
     for(struct Entry* entry : table) {
-        if(entry->symbol == symbol && find(entry->scope.begin(), entry->scope.end(), scope) == entry->scope.end()) {
-            cout << "Semantic error. Variable " << symbol << " not declared." << scope << endl;
-            //return true;
-        }
+        if(entry->symbol == symbol && entry->type == "event")
+            return false;
     }
-    return false;
+    cout << "Semantic error. Event " << symbol << " not declared.\n"
+    << "Line: " << line << " Column: " << column << endl;
+    return true;
 }
 
-bool alreadyDeclared(vector<struct Entry*> & table, string symbol, int scope) {
+bool noProcDispatcher(vector<struct Entry*> table, string symbol, int line, int column) {
+    for(struct Entry* entry : table) {
+        if(entry->symbol == symbol && entry->isFunction)
+            return false;
+    }
+    cout << "Semantic error. Processor " << symbol << " not declared.\n"
+    << "Line: " << line << " Column: " << column << endl;
+    return true;
+}
+
+bool notDeclared(vector<struct Entry*> table, string symbol, vector<int> scope, int line, int column) {
+    for(struct Entry* entry : table) {
+        // Checks if the symbol exists in any scope within an entry in the table
+        if(entry->symbol == symbol && find(scope.begin(), scope.end(), entry->scope.back()) != scope.end())
+            return false;
+    }
+    cout << "Semantic error. Symbol " << symbol << " not declared.\n"
+    << "Line: " << line << " Column: " << column << endl;
+    return true;
+}
+
+bool alreadyDeclared(vector<struct Entry*> table, string symbol, int scope) {
     for(struct Entry* entry : table) {
         if(entry->symbol == symbol && entry->scope.back() == scope) {
-            cout << "Semantic error. Variable " << symbol << " already declared in this scope.\n"
+            cout << "Semantic error. Symbol " << symbol << " already declared in this scope.\n"
             << "Line: " << entry->lineDecl << " Column: " << entry->columnDecl << endl;
             return true;
         }
