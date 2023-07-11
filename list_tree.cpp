@@ -4,6 +4,7 @@
 Allocate memory for a node and stores new values in it
 Returns: pointer to new node
 symbol: symbol of the node
+type: type used to check
 child: address of children vector
 */
 struct Node* createNode(string symbol, string type, vector<struct Node*>& child) {
@@ -72,7 +73,7 @@ void printTree(struct Node* node, int printSpacing, fstream& file) {
         cout << "|    ";
         file << "|    ";
     }
-    cout << "|-> " << node->symbol << endl;
+    cout << "|-> " << node->symbol << " " << node->type << endl;
     file << "|-> " << node->symbol << endl;
 
     for(struct Node* child : node->children) {

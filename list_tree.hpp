@@ -26,6 +26,7 @@ Allocate memory for a node and stores new values in it
 
 Returns: pointer to new node
 string: symbol of the node
+string: type used to check
 vector<struct Node*>&: address of children vector
 */
 struct Node* createNode(string, string, vector<struct Node*> &);

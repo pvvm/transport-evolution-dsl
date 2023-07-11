@@ -11,6 +11,7 @@ extern int yylex_destroy(void);
 extern char * yytext;
 extern FILE *yyin;
 void yyerror(const char *);
+struct Node* opOperations(struct Node*, struct Node*, string, int, int);
 
 vector<struct Node*> children;
 vector<struct Node*> emptyVector;
@@ -32,6 +33,7 @@ string whereDeclared = "";
 // List of parameter type
 vector<string> paramType;
 
+string resultType = "";
 
 %}
 
@@ -88,7 +90,7 @@ program:        multDecl                                {children = removeBlankN
                                                         $$ = createNode("program", "test", children);
                                                         fstream file;
                                                         file.open("tree_result.txt", ios::out);
-                                                        //printTree($$, 0, file);
+                                                        printTree($$, 0, file);
                                                         printTable(symbolTable);
                                                         freeTree($$);
                                                         freeTable(symbolTable);
@@ -471,24 +473,24 @@ varDecl:        types ID                                {if(alreadyDeclared(symb
                                                         createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         paramType.push_back($1->symbol);
                                                         freeNode($1);
-                                                        $$ = createNode($2.symbol, "test", emptyVector);}
+                                                        $$ = createNode($2.symbol, $1->symbol, emptyVector);}
                 | types ID                              {columnBeginDecl = yylval.token.columnBegin;}
                     ATTRIB_OP attribution               {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
                                                             YYABORT;
                                                         createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, columnBeginDecl, symbolTable, whereDeclared);
                                                         paramType.push_back($1->symbol);
                                                         freeNode($1);
-                                                        helper = createNode($2.symbol, "test", emptyVector);
+                                                        helper = createNode($2.symbol, $1->symbol, emptyVector);
                                                         children.push_back(helper);
                                                         children.push_back($5);
-                                                        $$ = createNode($4.symbol, "test", children);}
+                                                        $$ = createNode($4.symbol, $1->symbol, children);}
                 | LIST_T LESSER_OP types GREATER_OP ID
                                                         {if(alreadyDeclared(symbolTable, $5.symbol, scopeList.back()))
                                                             YYABORT;
                                                         createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         paramType.push_back($1.symbol);
                                                         freeNode($3);
-                                                        $$ = createNode($5.symbol, "test", emptyVector);}
+                                                        $$ = createNode($5.symbol, $1.symbol, emptyVector);}
                 /*| PROC_OUT_T ID                       {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
                                                             YYABORT;
                                                         createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
@@ -505,62 +507,68 @@ types:          INT_T                                   {$$ = createNode($1.symb
                 | QUEUE_T                               {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
                 ;
 
-attribution:    idVariations ATTRIB_OP attribution      {children.push_back($1);
-                                                        children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
+attribution:    idVariations ATTRIB_OP attribution      {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            YYABORT;}
                 | logicalOr                             {$$ = $1;}
                 ;
 
-logicalOr:      logicalOr LOGIC_OR_OP logicalAnd        {children.push_back($1);
-                                                        children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
+logicalOr:      logicalOr LOGIC_OR_OP logicalAnd        {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            YYABORT;}
                 | logicalAnd                            {$$ = $1;}
                 ;
 
-logicalAnd:     logicalAnd LOGIC_AND_OP compareExp      {children.push_back($1);
-                                                        children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
+logicalAnd:     logicalAnd LOGIC_AND_OP compareExp      {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            YYABORT;}
                 | compareExp                            {$$ = $1;}
                 ;
 
-compareExp:     compareExp RELAT_LOW_OP relationExp     {children.push_back($1);
-                                                        children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
+compareExp:     compareExp RELAT_LOW_OP relationExp     {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            YYABORT;}
                 | relationExp                           {$$ = $1;}
                 ;
 
-relationExp:    relationExp GREATER_OP lowMathExp       {children.push_back($1);
-                                                        children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
-                | relationExp LESSER_OP lowMathExp      {children.push_back($1);
-                                                        children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
-                | relationExp RELAT_HIGH_OP lowMathExp  {children.push_back($1);
-                                                        children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
+relationExp:    relationExp GREATER_OP lowMathExp       {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            YYABORT;}
+                | relationExp LESSER_OP lowMathExp      {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            YYABORT;}
+                | relationExp RELAT_HIGH_OP lowMathExp  {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            YYABORT;}
                 | lowMathExp                            {$$ = $1;}
                 ;
 
-lowMathExp:     lowMathExp MATH_ADD_OP highMathExp      {children.push_back($1);
-                                                        children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
-                | lowMathExp MATH_SUB_OP highMathExp    {children.push_back($1);
-                                                        children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
+lowMathExp:     lowMathExp MATH_ADD_OP highMathExp      {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            YYABORT;}
+                | lowMathExp MATH_SUB_OP highMathExp    {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            YYABORT;}
                 | highMathExp                           {$$ = $1;}
                 ;
 
-highMathExp:    highMathExp MATH_HIGH_OP unaryExp       {children.push_back($1);
-                                                        children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
+highMathExp:    highMathExp MATH_HIGH_OP unaryExp       {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            YYABORT;}
                 | unaryExp                              {$$ = $1;}
                 ;
 
 
-unaryExp:       LOGIC_NOT_OP unaryExp                   {children.push_back($2);
+unaryExp:       LOGIC_NOT_OP unaryExp                   {resultType = checkType($2->type, "", $1.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if(resultType.empty())
+                                                            YYABORT;
+                                                        children.push_back($2);
                                                         $$ = createNode($1.symbol, "test", children);}
-                | MATH_SUB_OP unaryExp                  {children.push_back($2);
-                                                        $$ = createNode($1.symbol, "test", children);}
+                | MATH_SUB_OP unaryExp                  {resultType = checkType($2->type, "", $1.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if(resultType.empty())
+                                                            YYABORT;
+                                                        children.push_back($2);
+                                                        $$ = createNode($1.symbol, resultType, children);}
                 | TYPE OPEN_P unaryExp CLOSE_P          {children.push_back($3);
                                                         $$ = createNode($1.symbol, "test", children);}
                 | BYTES OPEN_P unaryExp CLOSE_P         {children.push_back($3);
@@ -569,10 +577,10 @@ unaryExp:       LOGIC_NOT_OP unaryExp                   {children.push_back($2);
                 ;
 
 element:        idVariations                            {$$ = $1;}
-                | CONST_INT                             {$$ = createNode($1.symbol, "test", emptyVector);}
-                | CONST_FLOAT                           {$$ = createNode($1.symbol, "test", emptyVector);}
-                | FALSE                                 {$$ = createNode($1.symbol, "test", emptyVector);}
-                | TRUE                                  {$$ = createNode($1.symbol, "test", emptyVector);}
+                | CONST_INT                             {$$ = createNode($1.symbol, "int", emptyVector);}
+                | CONST_FLOAT                           {$$ = createNode($1.symbol, "float", emptyVector);}
+                | FALSE                                 {$$ = createNode($1.symbol, "bool", emptyVector);}
+                | TRUE                                  {$$ = createNode($1.symbol, "bool", emptyVector);}
                 | OPEN_P attribution CLOSE_P            {$$ = $2;}
                 | TIME OPEN_P CLOSE_P                   {$$ = createNode($1.symbol, "test", emptyVector);}
                 | TIMER DOT timerOps OPEN_P CLOSE_P     {helper = createNode($1.symbol, "test", emptyVector);
@@ -639,9 +647,10 @@ squareBrackets: squareBrackets OPEN_S sliceExp CLOSE_S
                                                         {children.push_back($1);
                                                         children.push_back($3);
                                                         $$ = createNode("[]", "test", children);}
-                | ID                                    {if(notDeclared(symbolTable, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin))
+                | ID                                    {resultType = findDeclaration(symbolTable, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin);
+                                                        if(resultType.empty())
                                                             YYABORT;
-                                                        $$ = createNode($1.symbol, "test", emptyVector);}
+                                                        $$ = createNode($1.symbol, resultType, emptyVector);}
                 ;
 
 sliceExp:       sliceExp SLICE_OP logicalOr             {children.push_back($1);
@@ -653,8 +662,17 @@ sliceExp:       sliceExp SLICE_OP logicalOr             {children.push_back($1);
 // COMMON GRAMMAR END
 %%
 
+struct Node* opOperations(struct Node* arg1, struct Node* arg2, string op, int line, int column) {
+    resultType = checkType(arg1->type, arg2->type, op, line, column);
+    if(resultType == "")
+        return NULL;
+    children.push_back(arg1);
+    children.push_back(arg2);
+    return createNode(op, resultType, children);
+}
+
 void yyerror(const char *error){
-    cout << "Error:" << error << "\nLine:" << yylval.token.line
+    cout << "Syntax error." << error << "\nLine:" << yylval.token.line
     << "\nColumn:" << yylval.token.column << endl;
 }
 
