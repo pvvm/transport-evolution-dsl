@@ -22,11 +22,11 @@ event TIMER {
 
 sched myScheduler {
 
-    int send_drop(queue_t send_queue, SEND new_event) {
+    int send_drop(queue_t send_queue) {
         int most_recent = 0;
         int index = 0;
         int counter = 0;
-        event_t element;
+        SEND element;
 
         foreach (element in send_queue) {
             if(element.time_event > most_recent) {
@@ -39,7 +39,7 @@ sched myScheduler {
         return index;
     }
 
-    bool enqueue(queue_t send_queue, event new_event) {
+    bool enqueue(queue_t send_queue, event_t new_event) {
 
         if (type(new_event) == SEND) {
             send_queue.push(new_event);
@@ -50,13 +50,13 @@ sched myScheduler {
 
     queue_t<SEND> send_queue(10, 20, send_drop);
 
-    int ack_drop(queue_t ack_queue, ACK new_event) {
+    int ack_drop(queue_t ack_queue) {
         int index = ack_queue.len() - 1;
 
         return index;
     }
 
-    bool enqueue(queue_t ack_queue, event new_event) {
+    bool enqueue(queue_t ack_queue, event_t new_event) {
         if (type(new_event) == ACK) {
             ack_queue.push(new_event);
             return 1;
@@ -67,13 +67,13 @@ sched myScheduler {
     queue_t<ACK> ack_queue(5, 15, ack_drop);
 
 
-    int timer_drop(queue_t timer_queue, TIMER new_event) {
+    int timer_drop(queue_t timer_queue) {
         int index = timer_queue.len() - 1;
 
         return index;
     }
 
-    bool enqueue(queue_t timer_queue, event new_event) {
+    bool enqueue(queue_t timer_queue, event_t new_event) {
         if (type(new_event) == TIMER) {
             timer_queue.push(new_event);
             return 1;
@@ -130,12 +130,12 @@ proc_out_t SendProcessor(SEND this_event, myContext ctx) {
         TCPheader th;
         th.seq = ctx.m_Iss + ctx.m_Nxt;
         pkt_t p = new_pkt();
-        p.add_data(ctx.data[ctx.m_Nxt : ctx.m_Nxt + ctx.m_segmentsize]);
+        //p.add_data(ctx.data[ctx.m_Nxt : ctx.m_Nxt + ctx.m_segmentsize]);
         p.add_hdr(th);
         output.packet_list.add(p);
 
         float now = time();
-        ctx.startTime[ctx.m_Iss + ctx.m_Nxt + ctx.m_segmentsize] = now;
+        //ctx.startTime[ctx.m_Iss + ctx.m_Nxt + ctx.m_segmentsize] = now;
     }
 
     return output;
@@ -145,7 +145,7 @@ proc_out_t ACKProcessor(ACK this_event, myContext ctx) {
     proc_out_t output;
     if(!ctx.timeouthappened && ctx.m_Una < this_event.acknum) {
         float now = time();
-        float R = now - ctx.startTime[this_event.acknum];
+        //float R = now - ctx.startTime[this_event.acknum];
         if (ctx.SRTT == 0) {
             ctx.SRTT = R;
             ctx.RTTVAR = R/2;
@@ -191,7 +191,7 @@ proc_out_t TIMERProcessor(TIMER this_event, myContext ctx) {
         if (ctx.RTO < 3) {
             ctx.RTO = 3.0;
         }
-        p.add_data(ctx.data[ctx.m_Una : ctx.m_Una + ctx.m_segmentsize]);
+        //p.add_data(ctx.data[ctx.m_Una : ctx.m_Una + ctx.m_segmentsize]);
         p.add_hdr(th);
     }
 

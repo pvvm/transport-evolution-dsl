@@ -10,7 +10,7 @@ using namespace std;
 
 typedef struct Entry {
     string symbol;
-    string type;
+    vector<string> type;
     vector<int> scope;
     int lineDecl;
     int columnDecl;
@@ -57,6 +57,8 @@ vector<string>: type of the parameters
 */
 void updateFunctionEntry(vector<struct Entry*> &, string,
 int, int, vector<string>);
+
+void updateTypeEntry(vector<struct Entry*> &, string, int, string);
 
 /*
 Prints the symbol table

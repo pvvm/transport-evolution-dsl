@@ -259,7 +259,7 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 
 "//".*          {}
 
-.               {printf("Lexical error: %s Line: %d Column: %d\n", yytext, line, column);
+.               {printf("Lexical error: %s\nLine: %d Column: %d\n", yytext, line, column);
                 column += yyleng;}
 
 %%

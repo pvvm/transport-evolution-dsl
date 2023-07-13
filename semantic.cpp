@@ -102,7 +102,7 @@ column: column where it is used
 */
 bool noEventDispatcher(vector<struct Entry*> table, string symbol, int line, int column) {
     for(struct Entry* entry : table) {
-        if(entry->symbol == symbol && entry->type == "event")
+        if(entry->symbol == symbol && entry->type.front() == "event")
             return false;
     }
     cout << "Semantic error. Event " << symbol << " not declared in this scope.\n"
@@ -129,6 +129,15 @@ bool noProcDispatcher(vector<struct Entry*> table, string symbol, int line, int 
     return true;
 }
 
+struct Entry* findEntry(vector<struct Entry*> table, string symbol, vector<int> scope) {
+    for(struct Entry* entry : table) {
+        // Checks if the symbol exists in any scope within an entry in the table
+        if(entry->symbol == symbol && find(scope.begin(), scope.end(), entry->scope.back()) != scope.end())
+            return entry;
+    }
+    return NULL;
+}
+
 /*
 Checks if a used symbol was declared previously
 Returns: the type of the symbol
@@ -140,14 +149,12 @@ line: line where it is used
 column: column where it is used
 */
 string findDeclaration(vector<struct Entry*> table, string symbol, vector<int> scope, int line, int column) {
-    for(struct Entry* entry : table) {
-        // Checks if the symbol exists in any scope within an entry in the table
-        if(entry->symbol == symbol && find(scope.begin(), scope.end(), entry->scope.back()) != scope.end())
-            return entry->type;
-    }
+    struct Entry* result = findEntry(table, symbol, scope);
+    if(result != NULL)
+        return result->type.front();
     cout << "Semantic error. Symbol " << symbol << " not declared in this scope.\n"
     << "Line: " << line << " Column: " << column << endl;
-    return "";
+    return "error";
 }
 
 /*
@@ -167,4 +174,53 @@ bool alreadyDeclared(vector<struct Entry*> table, string symbol, int scope) {
         }
     }
     return false;
+}
+
+
+string structCheck(vector<struct Entry*> table, string arg1, string arg2, vector<int> scope, int line, int column) {
+    struct Entry* arg1Entry = findEntry(table, arg1, scope);
+    struct Entry* arg2Entry = findEntry(table, arg2, scope);
+
+    if(arg1Entry->type.front() == arg2Entry->whereDeclared)
+        return arg2Entry->type.front();
+    
+    cout << "Semantic error. Symbol " << arg1 << " does not have an entry for " << arg2 <<
+    ".\nLine: " << line << " Column: " << column << endl;
+    return "error";
+}
+
+string builtinChecker(vector<struct Entry*> table, string func,
+string leftType, string argSymbol, int line,
+int column, vector<int> scope) {
+
+    // Built-in functions without arguments
+    if(argSymbol.empty()) {
+        if(func == "len" && (leftType == "queue_t" || leftType == "list"))
+            return "int";
+        // CHECK
+        else if(func == "pop" && leftType == "queue_t")
+            return "event";
+        else if(func == "get_hdr" && leftType == "pkt_t")
+            return "";
+        else if(func == "get_data" && leftType == "pkt_t")
+            return "";
+
+    // Built-in functions with argument
+    } else if(!argSymbol.empty()) {
+        // Gets table entry for the argument
+        struct Entry* argEntry = findEntry(table, argSymbol, scope);
+        if(argEntry == NULL) {
+            cout << "Semantic error. Function " << func << "does not accept parameters of type ." << endl;
+            return "error";
+        }
+        if(func == "add" && (leftType == "list"))
+            return "";
+        else if(func == "push" && (leftType == "queue_t" && argEntry->type.back() == "event_t"))
+            return "";
+        else if(func == "add_hdr" && leftType == "pkt_t" && argEntry->type.back() == "header")
+            return "";
+        else if(func == "add_data" && leftType == "pkt_t" && argEntry->type.back() == "stream")
+            return "";
+    }
+    return "error";
 }

@@ -80,6 +80,10 @@ TO DO:
 FIX GET_HDR<>. IT IS CONSIDERING THEY ARE OPERATORS < AND >
 
 CHANGE HOW EVENT AS A FUNCTION PARAMETER IS IMPLEMENTED
+
+CHECK INDEX, CAUSING SEGMENTATION FAULT (COMMENTED IN TCP)
+
+WHAT IF WE CHANGE FROM id.get_hdr<id>() to id.get_hdr()?
 */
 
 %start program
@@ -171,17 +175,17 @@ dispMult:       dispMult dispDecl                       {children.push_back($1);
     // id -> {...};
 dispDecl:       ID ARROW OPEN_B processorIds CLOSE_B SEMIC
                                                         {if(noEventDispatcher(symbolTable, $1.symbol, yylval.token.line, yylval.token.column))
-                                                            YYABORT;
+                                                            cout << "oi";
                                                         children = treeToVector($4);
                                                         $$ = createNode($1.symbol, "test", children);}
                 ;
 
 processorIds:   ID COMMA processorIds                   {if(noProcDispatcher(symbolTable, $1.symbol, yylval.token.line, yylval.token.column))
-                                                            YYABORT;
+                                                            cout << "oi";
                                                         children = removeBlankNodes($3);
                                                         $$ = createNode($1.symbol, "test", children);}
                 | ID                                    {if(noProcDispatcher(symbolTable, $1.symbol, yylval.token.line, yylval.token.columnBegin))
-                                                            YYABORT;
+                                                            cout << "oi";
                                                         $$ = createNode($1.symbol, "test", emptyVector);}
                 ;
 
@@ -469,15 +473,23 @@ return:         RETURN attribution                      {children.push_back($2);
                 ;
 
 varDecl:        types ID                                {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
-                                                            YYABORT;
+                                                            cout << "oi";
                                                         createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+                                                        if($1->type == "") {
+                                                            string type = findDeclaration(symbolTable, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin);
+                                                            updateTypeEntry(symbolTable, $2.symbol, scopeList.back(), type);
+                                                        }
                                                         paramType.push_back($1->symbol);
                                                         freeNode($1);
                                                         $$ = createNode($2.symbol, $1->symbol, emptyVector);}
                 | types ID                              {columnBeginDecl = yylval.token.columnBegin;}
                     ATTRIB_OP attribution               {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
-                                                            YYABORT;
+                                                            cout << "oi";
                                                         createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, columnBeginDecl, symbolTable, whereDeclared);
+                                                        if($1->type == "") {
+                                                            string type = findDeclaration(symbolTable, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin);
+                                                            updateTypeEntry(symbolTable, $2.symbol, scopeList.back(), type);
+                                                        }
                                                         paramType.push_back($1->symbol);
                                                         freeNode($1);
                                                         helper = createNode($2.symbol, $1->symbol, emptyVector);
@@ -486,13 +498,14 @@ varDecl:        types ID                                {if(alreadyDeclared(symb
                                                         $$ = createNode($4.symbol, $1->symbol, children);}
                 | LIST_T LESSER_OP types GREATER_OP ID
                                                         {if(alreadyDeclared(symbolTable, $5.symbol, scopeList.back()))
-                                                            YYABORT;
+                                                            cout << "oi";
                                                         createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+                                                        updateTypeEntry(symbolTable, $5.symbol, scopeList.back(), $3->symbol);
                                                         paramType.push_back($1.symbol);
                                                         freeNode($3);
                                                         $$ = createNode($5.symbol, $1.symbol, emptyVector);}
                 /*| PROC_OUT_T ID                       {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
-                                                            YYABORT;
+                                                            cout << "oi";
                                                         createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         $$ = createNode($2.symbol, "test", emptyVector);}*/
                 ;
@@ -500,7 +513,7 @@ varDecl:        types ID                                {if(alreadyDeclared(symb
 types:          INT_T                                   {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
                 | FLOAT_T                               {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
                 | STREAM_T                              {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
-                | ID                                    {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
+                | ID                                    {$$ = createNode($1.symbol, "", emptyVector);}
                 | BOOL_T                                {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
                 | EVENT_T                               {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
                 | PACKET_T                              {$$ = createNode($1.symbol, $1.symbol, emptyVector);}
@@ -509,68 +522,68 @@ types:          INT_T                                   {$$ = createNode($1.symb
 
 attribution:    idVariations ATTRIB_OP attribution      {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if($$ == NULL)
-                                                            YYABORT;}
+                                                            cout << "oi";}
                 | logicalOr                             {$$ = $1;}
                 ;
 
 logicalOr:      logicalOr LOGIC_OR_OP logicalAnd        {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if($$ == NULL)
-                                                            YYABORT;}
+                                                            cout << "oi";}
                 | logicalAnd                            {$$ = $1;}
                 ;
 
 logicalAnd:     logicalAnd LOGIC_AND_OP compareExp      {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if($$ == NULL)
-                                                            YYABORT;}
+                                                            cout << "oi";}
                 | compareExp                            {$$ = $1;}
                 ;
 
 compareExp:     compareExp RELAT_LOW_OP relationExp     {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if($$ == NULL)
-                                                            YYABORT;}
+                                                            cout << "oi";}
                 | relationExp                           {$$ = $1;}
                 ;
 
 relationExp:    relationExp GREATER_OP lowMathExp       {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if($$ == NULL)
-                                                            YYABORT;}
+                                                            cout << "oi";}
                 | relationExp LESSER_OP lowMathExp      {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if($$ == NULL)
-                                                            YYABORT;}
+                                                            cout << "oi";}
                 | relationExp RELAT_HIGH_OP lowMathExp  {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if($$ == NULL)
-                                                            YYABORT;}
+                                                            cout << "oi";}
                 | lowMathExp                            {$$ = $1;}
                 ;
 
 lowMathExp:     lowMathExp MATH_ADD_OP highMathExp      {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if($$ == NULL)
-                                                            YYABORT;}
+                                                            cout << "oi";}
                 | lowMathExp MATH_SUB_OP highMathExp    {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if($$ == NULL)
-                                                            YYABORT;}
+                                                            cout << "oi";}
                 | highMathExp                           {$$ = $1;}
                 ;
 
 highMathExp:    highMathExp MATH_HIGH_OP unaryExp       {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if($$ == NULL)
-                                                            YYABORT;}
+                                                            cout << "oi";}
                 | unaryExp                              {$$ = $1;}
                 ;
 
 
 unaryExp:       LOGIC_NOT_OP unaryExp                   {resultType = checkType($2->type, "", $1.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if(resultType.empty())
-                                                            YYABORT;
+                                                            cout << "oi";
                                                         children.push_back($2);
                                                         $$ = createNode($1.symbol, "test", children);}
                 | MATH_SUB_OP unaryExp                  {resultType = checkType($2->type, "", $1.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if(resultType.empty())
-                                                            YYABORT;
+                                                            cout << "oi";
                                                         children.push_back($2);
                                                         $$ = createNode($1.symbol, resultType, children);}
                 | TYPE OPEN_P unaryExp CLOSE_P          {children.push_back($3);
-                                                        $$ = createNode($1.symbol, "test", children);}
+                                                        $$ = createNode($1.symbol, $3->type, children);}
                 | BYTES OPEN_P unaryExp CLOSE_P         {children.push_back($3);
                                                         $$ = createNode($1.symbol, "test", children);}
                 | element                               {$$ = $1;}
@@ -597,50 +610,62 @@ timerOps:       SET_DURATION                            {$$ = createNode($1.symb
                 | RESTART                               {$$ = createNode($1.symbol, "test", emptyVector);}
                 ;
 
-idVariations:   idVariations DOT squareBrackets         {children.push_back($1);
+idVariations:   idVariations DOT squareBrackets         {resultType = structCheck(symbolTable, $1->symbol, $3->symbol, scopeList, yylval.token.line, yylval.token.columnBegin);
+                                                        if(resultType == "error")
+                                                            cout << "oi";
+                                                        children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
+                                                        $$ = createNode($2.symbol, resultType, children);}
                 | idVariations DOT builtInFunc OPEN_P CLOSE_P
-                                                        {children.push_back($1);
+                                                        {resultType = builtinChecker(symbolTable, $3->symbol, $1->type, "", yylval.token.line, yylval.token.columnBegin, scopeList);
+                                                        if(resultType == "error")
+                                                            cout << "oi";
+                                                        children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
+                                                        $$ = createNode($2.symbol, resultType, children);}
                 | idVariations DOT builtInFunc OPEN_P attribution CLOSE_P
-                                                        {children.push_back($5);
-                                                        helper = createNode($3->symbol, "test", children);
+                                                        {resultType = builtinChecker(symbolTable, $3->symbol, $1->type, $5->symbol, yylval.token.line, yylval.token.columnBegin, scopeList);
+                                                        if(resultType == "error")
+                                                            cout << "oi";
+                                                        children.push_back($5);
+                                                        helper = createNode($3->symbol, resultType, children);
                                                         freeNode($3);
                                                         children.push_back($1);
                                                         children.push_back(helper);
-                                                        $$ = createNode($2.symbol, "test", children);}
-                | idVariations DOT builtInFunc LESSER_OP ID GREATER_OP OPEN_P CLOSE_P
+                                                        $$ = createNode($2.symbol, resultType, children);}
+                /*| idVariations DOT builtInFunc LESSER_OP ID GREATER_OP OPEN_P CLOSE_P
                                                         {helper = createNode($5.symbol, "test", emptyVector);
                                                         helper2 = createNode($3->symbol, "test", children);
                                                         freeNode($3);
                                                         children.push_back($1);
                                                         children.push_back(helper2);
                                                         children.push_back(helper);
-                                                        $$ = createNode($2.symbol, "test", children);}
-                | idVariations ARROW squareBrackets     {children.push_back($1);
+                                                        $$ = createNode($2.symbol, "test", children);}*/
+                | idVariations ARROW squareBrackets     {resultType = structCheck(symbolTable, $1->symbol, $3->symbol, scopeList, yylval.token.line, yylval.token.columnBegin);
+                                                        if(resultType == "error")
+                                                            cout << "oi";
+                                                        children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
+                                                        $$ = createNode($2.symbol, resultType, children);}
                 | squareBrackets                        {$$ = $1;}
                 ;
 
                 // id.add(...)
-builtInFunc:    ADD                                     {$$ = createNode($1.symbol, "test", emptyVector);}
+builtInFunc:    ADD                                     {$$ = createNode($1.symbol, "", emptyVector);}
                 // id.add_hdr(...)
-                | ADD_HDR                               {$$ = createNode($1.symbol, "test", emptyVector);}
+                | ADD_HDR                               {$$ = createNode($1.symbol, "", emptyVector);}
                 // id.get_hdr<id>()
-                | GET_HDR                               {$$ = createNode($1.symbol, "test", emptyVector);}
+                | GET_HDR                               {$$ = createNode($1.symbol, "", emptyVector);}
                 // id.add_data(...)
-                | ADD_DATA                              {$$ = createNode($1.symbol, "test", emptyVector);}
+                | ADD_DATA                              {$$ = createNode($1.symbol, "", emptyVector);}
                 // id.get_data()
-                | GET_DATA                              {$$ = createNode($1.symbol, "test", emptyVector);}
+                | GET_DATA                              {$$ = createNode($1.symbol, "", emptyVector);}
                 // id.push(...)
-                | PUSH                                  {$$ = createNode($1.symbol, "test", emptyVector);}
+                | PUSH                                  {$$ = createNode($1.symbol, "", emptyVector);}
                 // id.pop()
-                | POP                                   {$$ = createNode($1.symbol, "test", emptyVector);}
-                // id.length()
-                | LENGTH                                {$$ = createNode($1.symbol, "test", emptyVector);}
+                | POP                                   {$$ = createNode($1.symbol, "", emptyVector);}
+                // id.len()
+                | LENGTH                                {$$ = createNode($1.symbol, "", emptyVector);}
                 ;
 
 squareBrackets: squareBrackets OPEN_S sliceExp CLOSE_S
@@ -648,8 +673,8 @@ squareBrackets: squareBrackets OPEN_S sliceExp CLOSE_S
                                                         children.push_back($3);
                                                         $$ = createNode("[]", "test", children);}
                 | ID                                    {resultType = findDeclaration(symbolTable, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin);
-                                                        if(resultType.empty())
-                                                            YYABORT;
+                                                        if(resultType == "error")
+                                                            cout << "oi";
                                                         $$ = createNode($1.symbol, resultType, emptyVector);}
                 ;
 
@@ -664,16 +689,16 @@ sliceExp:       sliceExp SLICE_OP logicalOr             {children.push_back($1);
 
 struct Node* opOperations(struct Node* arg1, struct Node* arg2, string op, int line, int column) {
     resultType = checkType(arg1->type, arg2->type, op, line, column);
-    if(resultType == "")
-        return NULL;
+    //if(resultType == "error")
+    //    return NULL;
     children.push_back(arg1);
     children.push_back(arg2);
     return createNode(op, resultType, children);
 }
 
 void yyerror(const char *error){
-    cout << "Syntax error." << error << "\nLine:" << yylval.token.line
-    << "\nColumn:" << yylval.token.column << endl;
+    cout << error << "\nLine: " << yylval.token.line
+    << " Column: " << yylval.token.column << endl;
 }
 
 int main(int arc, char **argv) {

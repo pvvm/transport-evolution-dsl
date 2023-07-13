@@ -33,7 +33,7 @@ void createEntry(string symbol, string type, vector<int> scope,
 int line, int column, vector<struct Entry*> & table, string whereDeclared) {
     Entry* entry = new Entry; 
     entry->symbol = symbol;
-    entry->type = type;
+    entry->type.push_back(type);
     entry->scope = scope;
     entry->lineDecl = line;
     entry->columnDecl = column;
@@ -63,44 +63,62 @@ string symbol, int scope, int numParam, vector<string> typeParam) {
     }
 }
 
+void updateTypeEntry(vector<struct Entry*> & table,
+string symbol, int scope, string newType) {
+    for(auto entry : table) {
+        if(entry->symbol == symbol && entry->scope.back() == scope) {
+            entry->type.push_back(newType);
+        }
+    }
+}
+
 /*
 Prints the symbol table
 table: the symbol table
 */
 void printTable(vector<struct Entry*> table) {
-    const int l = 18, total = 163;
+    const int l = 25, total = 126;
 
     cout << setfill('_') << setw(total) << "" << endl;
     cout << "|" << right << setfill(' ') << setw(l) << "Symbol |" << setw(l) << "Type |"
     << setw(l) << "Scope |" << setw(l) << "Line |" << setw(l) << "Column |" 
-    << setw(l) << "Function? |" << setw(l) << "Num param |" << setw(l) << "Type param |"
-    << setw(l) << "Where |" << endl;
+    /*<< setw(l) << "Function? |" << setw(l) << "Num param |" << setw(l) << "Type param |"
+    << setw(l) << "Where |"*/
+    << endl;
     cout << "|" << right << setfill(' ') << setw(l) << "|" << setw(l) << "|"
-    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"
-    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"<< endl;
+    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"
+    /*<< setw(l) << "|" << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"*/
+    << endl;
 
-    string scopeList;
     string typeList;
+    string scopeList;
+    string argTypeList;
     for(struct Entry* entry : table) {
-        scopeList = "";
         typeList = "";
+        scopeList = "";
+        argTypeList = "";
+
+        for(auto types : entry->type)
+            typeList = typeList + " " + types;
+
         for(auto scope : entry->scope)
             scopeList = scopeList + " " + to_string(scope);
         
-        for(auto test : entry->typeParameters)
-            typeList = typeList + " " + test;
+        //for(auto test : entry->typeParameters)
+        //    argTypeList = argTypeList + " " + test;
         
         cout << "|" << right << setfill(' ') << setw(l-2) << entry->symbol << " |"
-        << setw(l-2) << entry->type << " |" << setw(l-2) << scopeList << " |"
+        << setw(l-2) << typeList << " |" << setw(l-2) << scopeList << " |"
         << setw(l-2) << entry->lineDecl << " |" << setw(l-2) << entry->columnDecl << " |"
-        << setw(l-2) << entry->isFunction << " |" << setw(l-2) << entry->numParameters << " |"
-        << setw(l-2) << typeList << " |" << setw(l-2) << entry->whereDeclared
-        << " |" << endl;
+        /*<< setw(l-2) << entry->isFunction << " |" << setw(l-2) << entry->numParameters << " |"
+        << setw(l-2) << argTypeList << " |" << setw(l-2) << entry->whereDeclared << " |"*/
+        << endl;
     }
 
     cout << "|" << right << setfill('_') << setw(l) << "|" << setw(l) << "|"
-    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"
-    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"<< endl;
+    << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"
+    //<< setw(l) << "|"<< setw(l) << "|" << setw(l) << "|" << setw(l) << "|"
+    << endl;
 }
 
 /*
