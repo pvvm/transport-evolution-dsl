@@ -130,12 +130,12 @@ proc_out_t SendProcessor(SEND this_event, myContext ctx) {
         TCPheader th;
         th.seq = ctx.m_Iss + ctx.m_Nxt;
         pkt_t p = new_pkt();
-        //p.add_data(ctx.data[ctx.m_Nxt : ctx.m_Nxt + ctx.m_segmentsize]);
+        p.add_data(ctx.data[ctx.m_Nxt : ctx.m_Nxt + ctx.m_segmentsize]);
         p.add_hdr(th);
         output.packet_list.add(p);
 
         float now = time();
-        //ctx.startTime[ctx.m_Iss + ctx.m_Nxt + ctx.m_segmentsize] = now;
+        ctx.startTime[ctx.m_Iss + ctx.m_Nxt + ctx.m_segmentsize] = now;
     }
 
     return output;
@@ -145,7 +145,7 @@ proc_out_t ACKProcessor(ACK this_event, myContext ctx) {
     proc_out_t output;
     if(!ctx.timeouthappened && ctx.m_Una < this_event.acknum) {
         float now = time();
-        //float R = now - ctx.startTime[this_event.acknum];
+        float R = now - ctx.startTime[this_event.acknum];
         if (ctx.SRTT == 0) {
             ctx.SRTT = R;
             ctx.RTTVAR = R/2;
@@ -162,9 +162,9 @@ proc_out_t ACKProcessor(ACK this_event, myContext ctx) {
         }
     }
 
-    if (ctx.m_Una < this_event->acknum) {
+    if (ctx.m_Una < this_event.acknum) {
         ctx.m_Wnd = ctx.m_Wnd + ctx.m_segmentsize;
-        ctx.m_Una = this_event->acknum;
+        ctx.m_Una = this_event.acknum;
         timer.restart();
         ctx.timeouthappened = false;
         SEND new_event;
@@ -191,7 +191,7 @@ proc_out_t TIMERProcessor(TIMER this_event, myContext ctx) {
         if (ctx.RTO < 3) {
             ctx.RTO = 3.0;
         }
-        //p.add_data(ctx.data[ctx.m_Una : ctx.m_Una + ctx.m_segmentsize]);
+        p.add_data(ctx.data[ctx.m_Una : ctx.m_Una + ctx.m_segmentsize]);
         p.add_hdr(th);
     }
 

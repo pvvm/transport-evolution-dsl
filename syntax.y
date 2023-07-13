@@ -84,6 +84,15 @@ CHANGE HOW EVENT AS A FUNCTION PARAMETER IS IMPLEMENTED
 CHECK INDEX, CAUSING SEGMENTATION FAULT (COMMENTED IN TCP)
 
 WHAT IF WE CHANGE FROM id.get_hdr<id>() to id.get_hdr()?
+
+FIX FIND ENTRY TO GIVE THE SPECIFIC DECLARATION OF A VARIABLE ON A STRUCT
+THERE MIGHT BE MANY VARIABLES WITH THE SAME NAME AMONG STRUCTS
+
+CHECK IF A STRUCT VARIABLE IS USED WITHOUT THE something.variable FORMAT
+
+UNIFY OPERATOR CHECKER FUNCTIONS
+
+ADD SEMANTIC ANALYSIS FOR QUEUE DECLARATION
 */
 
 %start program
@@ -576,7 +585,7 @@ unaryExp:       LOGIC_NOT_OP unaryExp                   {resultType = checkType(
                                                         if(resultType.empty())
                                                             cout << "oi";
                                                         children.push_back($2);
-                                                        $$ = createNode($1.symbol, "test", children);}
+                                                        $$ = createNode($1.symbol, resultType, children);}
                 | MATH_SUB_OP unaryExp                  {resultType = checkType($2->type, "", $1.symbol, yylval.token.line, yylval.token.columnBegin);
                                                         if(resultType.empty())
                                                             cout << "oi";
@@ -585,7 +594,7 @@ unaryExp:       LOGIC_NOT_OP unaryExp                   {resultType = checkType(
                 | TYPE OPEN_P unaryExp CLOSE_P          {children.push_back($3);
                                                         $$ = createNode($1.symbol, $3->type, children);}
                 | BYTES OPEN_P unaryExp CLOSE_P         {children.push_back($3);
-                                                        $$ = createNode($1.symbol, "test", children);}
+                                                        $$ = createNode($1.symbol, "stream", children);}
                 | element                               {$$ = $1;}
                 ;
 
@@ -610,21 +619,21 @@ timerOps:       SET_DURATION                            {$$ = createNode($1.symb
                 | RESTART                               {$$ = createNode($1.symbol, "test", emptyVector);}
                 ;
 
-idVariations:   idVariations DOT squareBrackets         {resultType = structCheck(symbolTable, $1->symbol, $3->symbol, scopeList, yylval.token.line, yylval.token.columnBegin);
+idVariations:   idVariations DOT squareBrackets         {resultType = structCheck(symbolTable, $1->symbol, $3, scopeList, yylval.token.line, yylval.token.columnBegin);
                                                         if(resultType == "error")
                                                             cout << "oi";
                                                         children.push_back($1);
                                                         children.push_back($3);
                                                         $$ = createNode($2.symbol, resultType, children);}
                 | idVariations DOT builtInFunc OPEN_P CLOSE_P
-                                                        {resultType = builtinChecker(symbolTable, $3->symbol, $1->type, "", yylval.token.line, yylval.token.columnBegin, scopeList);
+                                                        {resultType = builtinChecker(symbolTable, $3->symbol, $1->type, NULL, yylval.token.line, yylval.token.columnBegin, scopeList);
                                                         if(resultType == "error")
                                                             cout << "oi";
                                                         children.push_back($1);
                                                         children.push_back($3);
                                                         $$ = createNode($2.symbol, resultType, children);}
                 | idVariations DOT builtInFunc OPEN_P attribution CLOSE_P
-                                                        {resultType = builtinChecker(symbolTable, $3->symbol, $1->type, $5->symbol, yylval.token.line, yylval.token.columnBegin, scopeList);
+                                                        {resultType = builtinChecker(symbolTable, $3->symbol, $1->type, $5, yylval.token.line, yylval.token.columnBegin, scopeList);
                                                         if(resultType == "error")
                                                             cout << "oi";
                                                         children.push_back($5);
@@ -641,7 +650,7 @@ idVariations:   idVariations DOT squareBrackets         {resultType = structChec
                                                         children.push_back(helper2);
                                                         children.push_back(helper);
                                                         $$ = createNode($2.symbol, "test", children);}*/
-                | idVariations ARROW squareBrackets     {resultType = structCheck(symbolTable, $1->symbol, $3->symbol, scopeList, yylval.token.line, yylval.token.columnBegin);
+                | idVariations ARROW squareBrackets     {resultType = structCheck(symbolTable, $1->symbol, $3, scopeList, yylval.token.line, yylval.token.columnBegin);
                                                         if(resultType == "error")
                                                             cout << "oi";
                                                         children.push_back($1);
@@ -669,18 +678,23 @@ builtInFunc:    ADD                                     {$$ = createNode($1.symb
                 ;
 
 squareBrackets: squareBrackets OPEN_S sliceExp CLOSE_S
-                                                        {children.push_back($1);
+                                                        {vector<string> objType;
+                                                        objType.push_back(findDeclaration(symbolTable, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin));
+                                                        resultType = indexChecker(objType, $3->type, yylval.token.line, yylval.token.columnBegin);
+                                                        if(resultType == "error")
+                                                            cout << "oi";
+                                                        children.push_back($1);
                                                         children.push_back($3);
-                                                        $$ = createNode("[]", "test", children);}
+                                                        $$ = createNode("[]", resultType, children);}
                 | ID                                    {resultType = findDeclaration(symbolTable, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin);
                                                         if(resultType == "error")
                                                             cout << "oi";
                                                         $$ = createNode($1.symbol, resultType, emptyVector);}
                 ;
 
-sliceExp:       sliceExp SLICE_OP logicalOr             {children.push_back($1);
-                                                        children.push_back($3);
-                                                        $$ = createNode($2.symbol, "test", children);}
+sliceExp:       sliceExp SLICE_OP logicalOr             {$$ = opOperations($1, $3, $2.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            cout << "oi";}
                 | logicalOr                             {$$ = $1;}
                 ;
 

@@ -77,17 +77,17 @@ Prints the symbol table
 table: the symbol table
 */
 void printTable(vector<struct Entry*> table) {
-    const int l = 25, total = 126;
+    const int l = 25, total = 151;
 
     cout << setfill('_') << setw(total) << "" << endl;
     cout << "|" << right << setfill(' ') << setw(l) << "Symbol |" << setw(l) << "Type |"
     << setw(l) << "Scope |" << setw(l) << "Line |" << setw(l) << "Column |" 
-    /*<< setw(l) << "Function? |" << setw(l) << "Num param |" << setw(l) << "Type param |"
-    << setw(l) << "Where |"*/
+    /*<< setw(l) << "Function? |" << setw(l) << "Num param |" << setw(l) << "Type param |"*/
+    << setw(l) << "Where |"
     << endl;
     cout << "|" << right << setfill(' ') << setw(l) << "|" << setw(l) << "|"
     << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"
-    /*<< setw(l) << "|" << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"*/
+    /*<< setw(l) << "|" << setw(l) << "|" << setw(l) << "|"*/ << setw(l) << "|"
     << endl;
 
     string typeList;
@@ -111,13 +111,13 @@ void printTable(vector<struct Entry*> table) {
         << setw(l-2) << typeList << " |" << setw(l-2) << scopeList << " |"
         << setw(l-2) << entry->lineDecl << " |" << setw(l-2) << entry->columnDecl << " |"
         /*<< setw(l-2) << entry->isFunction << " |" << setw(l-2) << entry->numParameters << " |"
-        << setw(l-2) << argTypeList << " |" << setw(l-2) << entry->whereDeclared << " |"*/
+        << setw(l-2) << argTypeList << " |"*/ << setw(l-2) << entry->whereDeclared << " |"
         << endl;
     }
 
     cout << "|" << right << setfill('_') << setw(l) << "|" << setw(l) << "|"
     << setw(l) << "|" << setw(l) << "|" << setw(l) << "|"
-    //<< setw(l) << "|"<< setw(l) << "|" << setw(l) << "|" << setw(l) << "|"
+    /*<< setw(l) << "|"<< setw(l) << "|" << setw(l) << "|"*/ << setw(l) << "|"
     << endl;
 }
 
