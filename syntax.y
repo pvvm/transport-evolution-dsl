@@ -35,6 +35,8 @@ vector<string> paramType;
 
 string resultType = "";
 
+int numberLoops = 0;
+
 %}
 
 %code requires {
@@ -55,7 +57,7 @@ string resultType = "";
 %token <token> INT_T FLOAT_T BOOL_T STREAM_T EVENT EVENT_T QUEUE_T SCHEDULER_T DISPATCH LIST_T PACKET_T
 %token <token> /*PROC_OUT_T*/ STRUCT_T CONTEXT_T HEADER CONST_INT CONST_FLOAT MATH_HIGH_OP MATH_ADD_OP TRUE FALSE
 %token <token> MATH_SUB_OP LOGIC_OR_OP LOGIC_AND_OP LOGIC_NOT_OP GREATER_OP LESSER_OP RELAT_HIGH_OP
-%token <token> RELAT_LOW_OP SLICE_OP ATTRIB_OP IF ELSE FOR FOREACH TIME IN RETURN TYPE NEW_PKT
+%token <token> RELAT_LOW_OP SLICE_OP ATTRIB_OP IF ELSE FOR FOREACH TIME IN RETURN BREAK TYPE NEW_PKT
 %token <token> LENGTH ADD_DATA ADD_HDR GET_HDR GET_DATA ADD PUSH POP BYTES /*NEXT_EVENT ENQUEUE*/ ID OPEN_B CLOSE_B OPEN_S CLOSE_S
 %token <token> OPEN_P CLOSE_P DOT COMMA SEMIC ARROW TIMER SET_DURATION START STOP RESTART
 
@@ -81,18 +83,19 @@ FIX GET_HDR<>. IT IS CONSIDERING THEY ARE OPERATORS < AND >
 
 CHANGE HOW EVENT AS A FUNCTION PARAMETER IS IMPLEMENTED
 
-CHECK INDEX, CAUSING SEGMENTATION FAULT (COMMENTED IN TCP)
-
 WHAT IF WE CHANGE FROM id.get_hdr<id>() to id.get_hdr()?
-
-FIX FIND ENTRY TO GIVE THE SPECIFIC DECLARATION OF A VARIABLE ON A STRUCT
-THERE MIGHT BE MANY VARIABLES WITH THE SAME NAME AMONG STRUCTS
-
-CHECK IF A STRUCT VARIABLE IS USED WITHOUT THE something.variable FORMAT
 
 UNIFY OPERATOR CHECKER FUNCTIONS
 
 ADD SEMANTIC ANALYSIS FOR QUEUE DECLARATION
+
+CHECK RETURNED TYPE FUNCTION
+
+IN structCheck, MAKE SURE THAT THE LIST SUBTYPE OF AN OBJECT
+MATCHES WITH THE ARGUMENT'S TYPE
+
+IN for(something in listSomething), should something be declared
+previously?
 */
 
 %start program
@@ -394,6 +397,9 @@ commonStmt:     conditionDecl                           {$$ = $1;}
                 | attribution SEMIC                     {$$ = $1;}
                 | return SEMIC                          {$$ = $1;}
                 | varDecl SEMIC                         {$$ = $1;}
+                | BREAK SEMIC                           {if(breakChecker(numberLoops, yylval.token.line, yylval.token.columnBegin))
+                                                            cout << "oi";
+                                                        $$ = createNode("break", "", children);}
                 ;
 
 conditionDecl:  IF                                      {increaseScope(scopeList, maximumScope);}
@@ -432,9 +438,11 @@ comCondition:   CLOSE_P bracketsOrNot
                 ;
 
     // foreach id in id { ... }
-dropLoop:       FOREACH                                 {increaseScope(scopeList, maximumScope);}
+dropLoop:       FOREACH                                 {increaseScope(scopeList, maximumScope);
+                                                        numberLoops++;}
                     OPEN_P ID IN idVariations CLOSE_P bracketsOrNot
-                                                        {decreaseScope(scopeList);
+                                                        {numberLoops--;
+                                                        decreaseScope(scopeList);
                                                         children = removeBlankNodes($8);
                                                         helper = createNode("loopStmts", "test", children);
                                                         helper2 = createNode($4.symbol, "test", emptyVector);
@@ -447,9 +455,11 @@ dropLoop:       FOREACH                                 {increaseScope(scopeList
                 ;
 
     // for ( ... ) { ... }
-comLoop:        FOR                                     {increaseScope(scopeList, maximumScope);}
+comLoop:        FOR                                     {increaseScope(scopeList, maximumScope);
+                                                        numberLoops++;}
                     OPEN_P loopArgs CLOSE_P bracketsOrNot
-                                                        {decreaseScope(scopeList);
+                                                        {numberLoops--;
+                                                        decreaseScope(scopeList);
                                                         children = removeBlankNodes($6);
                                                         helper = createNode("loopStmts", "test", children);
                                                         children.push_back($4);
@@ -481,7 +491,7 @@ return:         RETURN attribution                      {children.push_back($2);
                                                         $$ = createNode($1.symbol, "test", children);}
                 ;
 
-varDecl:        types ID                                {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
+varDecl:        types ID                                {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back(), whereDeclared, yylval.token.line, yylval.token.columnBegin))
                                                             cout << "oi";
                                                         createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         if($1->type == "") {
@@ -492,7 +502,7 @@ varDecl:        types ID                                {if(alreadyDeclared(symb
                                                         freeNode($1);
                                                         $$ = createNode($2.symbol, $1->symbol, emptyVector);}
                 | types ID                              {columnBeginDecl = yylval.token.columnBegin;}
-                    ATTRIB_OP attribution               {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
+                    ATTRIB_OP attribution               {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back(), whereDeclared, yylval.token.line, yylval.token.columnBegin))
                                                             cout << "oi";
                                                         createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, columnBeginDecl, symbolTable, whereDeclared);
                                                         if($1->type == "") {
@@ -506,14 +516,14 @@ varDecl:        types ID                                {if(alreadyDeclared(symb
                                                         children.push_back($5);
                                                         $$ = createNode($4.symbol, $1->symbol, children);}
                 | LIST_T LESSER_OP types GREATER_OP ID
-                                                        {if(alreadyDeclared(symbolTable, $5.symbol, scopeList.back()))
+                                                        {if(alreadyDeclared(symbolTable, $5.symbol, scopeList.back(), whereDeclared, yylval.token.line, yylval.token.columnBegin))
                                                             cout << "oi";
                                                         createEntry($5.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         updateTypeEntry(symbolTable, $5.symbol, scopeList.back(), $3->symbol);
                                                         paramType.push_back($1.symbol);
                                                         freeNode($3);
                                                         $$ = createNode($5.symbol, $1.symbol, emptyVector);}
-                /*| PROC_OUT_T ID                       {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back()))
+                /*| PROC_OUT_T ID                       {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back(), whereDeclared, yylval.token.line, yylval.token.columnBegin))
                                                             cout << "oi";
                                                         createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         $$ = createNode($2.symbol, "test", emptyVector);}*/

@@ -14,6 +14,7 @@ event SEND {
 event ACK {
     int flow_id;
     int acknum;
+    int time_event;
 }
 
 event TIMER {
@@ -167,7 +168,7 @@ proc_out_t ACKProcessor(ACK this_event, myContext ctx) {
         ctx.m_Una = this_event.acknum;
         timer.restart();
         ctx.timeouthappened = false;
-        SEND new_event;
+        ACK new_event;
         new_event.time_event = 0;
         new_event.flow_id = this_event.flow_id;
         output.event_list.add(new_event);

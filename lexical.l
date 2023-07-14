@@ -169,6 +169,9 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "return"        {tokenCreator();
                 return RETURN;}
 
+"break"         {tokenCreator();
+                return BREAK;}
+
 "type"          {tokenCreator();
                 return TYPE;}
 

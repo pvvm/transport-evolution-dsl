@@ -58,7 +58,7 @@ vector<struct Entry*>: symbol table
 string: symbol to be checked
 int: scope where it was declared
 */
-bool alreadyDeclared(vector<struct Entry*>, string, int);
+bool alreadyDeclared(vector<struct Entry*>, string, int, string, int, int);
 
 
 string structCheck(vector<struct Entry*>, string, struct Node*, vector<int>, int, int);
@@ -66,5 +66,7 @@ string structCheck(vector<struct Entry*>, string, struct Node*, vector<int>, int
 string builtinChecker(vector<struct Entry*>, string, string, struct Node*, int, int, vector<int>);
 
 string indexChecker(vector<string>, string, int, int);
+
+bool breakChecker(int, int, int);
 
 #endif
