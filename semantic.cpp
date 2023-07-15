@@ -12,22 +12,11 @@ string attribChecker(string type1, string type2, string op) {
     return result;
 }
 
-string logicChecker(string type1, string type2, string op) {
+string relatLogChecker(string type1, string type2, string op) {
     string allowedTypes = "int float bool";
     string result = "";
-    
+
     // && || !
-    if (allowedTypes.find(type1) != string::npos &&
-    (type2.empty() || allowedTypes.find(type2) != string::npos))
-        result = "bool";
-
-    return result;
-}
-
-string relatChecker(string type1, string type2, string op) {
-    string allowedTypes = "int float bool";
-    string result = "";
-
     // < > == != <= >=
     if(allowedTypes.find(type1) != string::npos && allowedTypes.find(type2) != string::npos)
         result = "bool";
@@ -77,17 +66,14 @@ string checkType(string type1, string type2, string op, int line, int column) {
     string result;
 
     string attribSymbol = "=";
-    string logicSymbols = "&& || !";
-    string relatSymbols = "< > == != <= >=";
+    string relatLogSymbols = "< > == != <= >= && || !";
     string aritSymbols = "+ - * /";
     string sliceSymbol = ":";
 
     if(op == attribSymbol)
         result = attribChecker(type1, type2, op);
-    else if(logicSymbols.find(op) != string::npos)
-        result = logicChecker(type1, type2, op);
-    else if(relatSymbols.find(op) != string::npos)
-        result = relatChecker(type1, type2, op);
+    else if(relatLogSymbols.find(op) != string::npos)
+        result = relatLogChecker(type1, type2, op);
     else if(aritSymbols.find(op) != string::npos)
         result = arithChecker(type1, type2, op);
     else if(op == sliceSymbol)
@@ -230,7 +216,7 @@ int column, vector<int> scope) {
             return "int";
         // CHECK
         if(func == "pop" && objType == "queue_t")
-            return "event";
+            return "event_t";
         if(func == "get_hdr" && objType == "pkt_t")
             return "";
         if(func == "get_data" && objType == "pkt_t")
@@ -288,6 +274,26 @@ bool breakChecker(int numberLoops, int line, int column) {
     if(numberLoops == 0) {
         cout << "Semantic error. Break should be used within loops.\n"
         << "Line: " << line << " Column: " << column << endl;
+        return true;
+    }
+    return false;
+}
+
+bool returnChecker(string functionType, string returnType, int line, int column) {
+    vector<string> commonTypes = {"float", "int", "bool"};
+
+    if(functionType.empty()) {
+        cout << "Semantic error. Return should be used within functions.\nLine: "
+        << line << " Column: " << column << endl;
+        return true;
+    }
+
+    if((find(commonTypes.begin(), commonTypes.end(), functionType) != commonTypes.end()) &&
+    (find(commonTypes.begin(), commonTypes.end(), returnType) != commonTypes.end()))
+        return false;
+    if(functionType != returnType) {
+        cout << "Semantic error. Incompatible return type (" << returnType << ") and function definition ("
+        << functionType << ").\nLine: " << line << " Column: " << column << endl;
         return true;
     }
     return false;

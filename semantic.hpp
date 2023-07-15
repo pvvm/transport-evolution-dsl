@@ -69,4 +69,6 @@ string indexChecker(vector<string>, string, int, int);
 
 bool breakChecker(int, int, int);
 
+bool returnChecker(string, string, int, int);
+
 #endif

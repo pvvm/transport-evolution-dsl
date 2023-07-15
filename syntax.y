@@ -37,6 +37,8 @@ string resultType = "";
 
 int numberLoops = 0;
 
+string functionType = "";
+
 %}
 
 %code requires {
@@ -64,7 +66,7 @@ int numberLoops = 0;
 %type <node> program multDecl declarations headerDecl dispatcher dispMult dispDecl
 %type <node> processorIds processorOrType structDecl 
 %type <node> /*processorDecl*/ context contVariables scheduler queues queueAndDrop
-%type <node> queueType queueTypeDecl queueDecl /*dropDecl*/
+%type <node> eventType eventTypeDecl queueDecl /*dropDecl*/
 %type <node> /*enquDecl nextEvent nextParam*/ comMultStmt comFunction argsOrNot funcArgs
 %type <node> commonStmt conditionDecl argCondition comCondition dropLoop comLoop loopArgs
 %type <node> bracketsOrNot firstArgument argument return varDecl types
@@ -79,20 +81,14 @@ int numberLoops = 0;
 /*
 TO DO:
 
-FIX GET_HDR<>. IT IS CONSIDERING THEY ARE OPERATORS < AND >
-
-CHANGE HOW EVENT AS A FUNCTION PARAMETER IS IMPLEMENTED
+IN structCheck, MAKE SURE THAT THE LIST SUBTYPE OF AN OBJECT
+MATCHES WITH THE ARGUMENT'S TYPE
 
 WHAT IF WE CHANGE FROM id.get_hdr<id>() to id.get_hdr()?
 
-UNIFY OPERATOR CHECKER FUNCTIONS
+ADD SEMANTIC ANALYSIS FOR QUEUE DECLARATION?
 
-ADD SEMANTIC ANALYSIS FOR QUEUE DECLARATION
-
-CHECK RETURNED TYPE FUNCTION
-
-IN structCheck, MAKE SURE THAT THE LIST SUBTYPE OF AN OBJECT
-MATCHES WITH THE ARGUMENT'S TYPE
+SHOULD TIME OPS WOKS AS BUILT IN FUNCTIONS?
 
 IN for(something in listSomething), should something be declared
 previously?
@@ -121,7 +117,7 @@ multDecl:       multDecl declarations                   {children = removeBlankN
                 ;
 
 declarations:   headerDecl                              {$$ = $1;}
-                | queueType                             {$$ = $1;}
+                | eventType                             {$$ = $1;}
                 | scheduler                             {$$ = $1;}
                 | dispatcher                            {$$ = $1;}
                 | processorOrType                       {$$ = $1;}
@@ -142,13 +138,13 @@ headerDecl:     HEADER ID                               {createEntry($2.symbol, 
 
 // HEADER END
 
-// QUEUE TYPE START
+// EVENT START
 
     // event id { ... };
-queueType:      EVENT ID                                {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+eventType:      EVENT ID                                {createEntry($2.symbol, $1.symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         //increaseScope(scopeList, maximumScope);
                                                         whereDeclared = $2.symbol;}
-                    OPEN_B queueTypeDecl CLOSE_B
+                    OPEN_B eventTypeDecl CLOSE_B
                                                         {//decreaseScope(scopeList);
                                                         whereDeclared = "";
                                                         children = treeToVector($5);
@@ -156,15 +152,15 @@ queueType:      EVENT ID                                {createEntry($2.symbol, 
                 ;
 
     // int id;
-queueTypeDecl:  types ID                                {createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
+eventTypeDecl:  types ID                                {createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         freeNode($1);}
-                    SEMIC queueTypeDecl                 {if($5 != NULL)
+                    SEMIC eventTypeDecl                 {if($5 != NULL)
                                                             children.push_back($5);
                                                         $$ = createNode($2.symbol, "test", children);}
                 | /* empty */                           {$$ = NULL;}
                 ;
 
-// QUEUE TYPE END
+// EVENT END
 
 // DISPATCHER START
 
@@ -347,10 +343,12 @@ nextParam:      nextParam COMMA QUEUE_T ID              {$$ = NULL;}
 
 comFunction:    types ID                                {createEntry($2.symbol, $1->symbol, scopeList, yylval.token.line, yylval.token.columnBegin, symbolTable, whereDeclared);
                                                         increaseScope(scopeList, maximumScope);
-                                                        paramType.clear();}
+                                                        paramType.clear();
+                                                        functionType = $1->symbol;}
                     OPEN_P argsOrNot CLOSE_P            {updateFunctionEntry(symbolTable, $2.symbol, scopeList.end()[-2], paramCounter, paramType);}
                     OPEN_B comMultStmt CLOSE_B          {decreaseScope(scopeList);
                                                         paramCounter = 0;
+                                                        functionType = "";
                                                         freeNode($1);
                                                         /*children = removeBlankNodes($4);
                                                         helper2 = createNode("funcArgs", "test", children);*/
@@ -487,8 +485,10 @@ argument:       attribution                             {$$ = $1;}
                 | /* empty */                           {$$ = createNode("empty", "test", emptyVector);}
                 ;
 
-return:         RETURN attribution                      {children.push_back($2);
-                                                        $$ = createNode($1.symbol, "test", children);}
+return:         RETURN attribution                      {if(returnChecker(functionType, $2->type, yylval.token.line, yylval.token.columnBegin))
+                                                            cout << "oi";
+                                                        children.push_back($2);
+                                                        $$ = createNode($1.symbol, "", children);}
                 ;
 
 varDecl:        types ID                                {if(alreadyDeclared(symbolTable, $2.symbol, scopeList.back(), whereDeclared, yylval.token.line, yylval.token.columnBegin))
@@ -510,11 +510,14 @@ varDecl:        types ID                                {if(alreadyDeclared(symb
                                                             updateTypeEntry(symbolTable, $2.symbol, scopeList.back(), type);
                                                         }
                                                         paramType.push_back($1->symbol);
-                                                        freeNode($1);
                                                         helper = createNode($2.symbol, $1->symbol, emptyVector);
-                                                        children.push_back(helper);
-                                                        children.push_back($5);
-                                                        $$ = createNode($4.symbol, $1->symbol, children);}
+                                                        freeNode($1);
+                                                        //children.push_back(helper);
+                                                        //children.push_back($5);
+                                                        //$$ = createNode($4.symbol, $1->symbol, children);
+                                                        $$ = opOperations(helper, $5, $4.symbol, yylval.token.line, yylval.token.columnBegin);
+                                                        if($$ == NULL)
+                                                            cout << "oi";}
                 | LIST_T LESSER_OP types GREATER_OP ID
                                                         {if(alreadyDeclared(symbolTable, $5.symbol, scopeList.back(), whereDeclared, yylval.token.line, yylval.token.columnBegin))
                                                             cout << "oi";
@@ -614,19 +617,19 @@ element:        idVariations                            {$$ = $1;}
                 | FALSE                                 {$$ = createNode($1.symbol, "bool", emptyVector);}
                 | TRUE                                  {$$ = createNode($1.symbol, "bool", emptyVector);}
                 | OPEN_P attribution CLOSE_P            {$$ = $2;}
-                | TIME OPEN_P CLOSE_P                   {$$ = createNode($1.symbol, "test", emptyVector);}
-                | TIMER DOT timerOps OPEN_P CLOSE_P     {helper = createNode($1.symbol, "test", emptyVector);
+                | TIME OPEN_P CLOSE_P                   {$$ = createNode($1.symbol, "float", emptyVector);}
+                | TIMER DOT timerOps OPEN_P CLOSE_P     {helper = createNode($1.symbol, "", emptyVector);
                                                         children.push_back(helper);
-                                                        helper2 = createNode($3->symbol, "test", emptyVector);
+                                                        helper2 = createNode($3->symbol, "", emptyVector);
                                                         children.push_back(helper2);
-                                                        $$ = createNode($2.symbol, "test", children);}
-                | NEW_PKT OPEN_P CLOSE_P                {$$ = createNode($1.symbol, "test", emptyVector);}
+                                                        $$ = createNode($2.symbol, "", children);}
+                | NEW_PKT OPEN_P CLOSE_P                {$$ = createNode($1.symbol, "pkt_t", emptyVector);}
                 ;
 
-timerOps:       SET_DURATION                            {$$ = createNode($1.symbol, "test", emptyVector);}
-                | START                                 {$$ = createNode($1.symbol, "test", emptyVector);}
-                | STOP                                  {$$ = createNode($1.symbol, "test", emptyVector);}
-                | RESTART                               {$$ = createNode($1.symbol, "test", emptyVector);}
+timerOps:       SET_DURATION                            {$$ = createNode($1.symbol, "", emptyVector);}
+                | START                                 {$$ = createNode($1.symbol, "", emptyVector);}
+                | STOP                                  {$$ = createNode($1.symbol, "", emptyVector);}
+                | RESTART                               {$$ = createNode($1.symbol, "", emptyVector);}
                 ;
 
 idVariations:   idVariations DOT squareBrackets         {resultType = structCheck(symbolTable, $1->symbol, $3, scopeList, yylval.token.line, yylval.token.columnBegin);
