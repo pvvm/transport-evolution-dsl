@@ -22,24 +22,24 @@ event ACK_PACKET {
 }
 
 sched myScheduler {
-    int add_drop(queue_t add_queue, ADD_DATA new_event) {
+    int add_drop(queue_t add_queue, event_t new_event) {
         int index = add_queue.len() - 1;
         return index;
     }
-    bool enqueue(event new_event) {
+    bool enqueue(queue_t add_queue, event_t new_event) {
         if (type(new_event) == ADD_DATA) {
-            send_queue.push(new_event);
+            add_queue.push(new_event);
             return 1;
         }
         return 0;
     }
     queue_t<ADD_DATA> add_queue(10, 20, add_drop);
 
-    int send_drop(queue_t send_queue, SEND_PACKET new_event) {
+    int send_drop(queue_t send_queue, event_t new_event) {
         int index = send_queue.len() - 1;
         return index;
     }
-    bool enqueue(event new_event) {
+    bool enqueue(queue_t send_queue, event_t new_event) {
         if (type(new_event) == SEND_PACKET) {
             send_queue.push(new_event);
             return 1;
@@ -48,11 +48,11 @@ sched myScheduler {
     }
     queue_t<SEND_PACKET> send_queue(5, 15, send_drop);
 
-    int ack_drop(queue_t ack_queue, ACK_PACKET new_event) {
+    int ack_drop(queue_t ack_queue, event_t new_event) {
         int index = ack_queue.len() - 1;
         return index;
     }
-    bool enqueue(event new_event) {
+    bool enqueue(queue_t ack_queue, event_t new_event) {
         if (type(new_event) == ACK_PACKET) {
             ack_queue.push(new_event);
             return 1;
@@ -70,12 +70,6 @@ sched myScheduler {
         }
         return add_queue.pop();
     }
-}
-
-dispatch table {
-    ADD_DATA -> {AddProcessor};
-    SEND_PACKET -> {SendProcessor};
-    ACK -> {ACKProcessor};
 }
 
 struct proc_out_t {
@@ -99,10 +93,23 @@ struct frame {
     stream data;
 }
 
+context QUICctx{
+    int packet_number;
+    list<QUICStream> streams;
+    list<pkt_t> sent_packets;
+    int frame_size;
+    int packet_size;
+    int sendBase = 0;
+    int windowSize = 1;
+    int k_packet_theshold = 0;
+}
+
 proc_out_t AddProcessor (ADD_DATA new_event, QUICctx ctx) {
     int stream_id = new_event.stream_id;
     
     bool found = false;
+    
+    QUICStream single_stream;
     foreach (single_stream in ctx.streams) {
         if (single_stream.stream_id == stream_id) {
             found == true;
@@ -113,8 +120,9 @@ proc_out_t AddProcessor (ADD_DATA new_event, QUICctx ctx) {
         new_stream.stream_id = stream_id;
         ctx.streams[stream_id] = new_stream;
     }
-    QUICKstream new_stream = ctx.streams[stream_id];
-    new_stream.add(new_event.new_data);
+    QUICStream new_stream = ctx.streams[stream_id];
+    // Add doesn't seem to make a lot of sense here
+    new_stream.data.add(new_event.new_data);
 
     proc_out_t output;
 
@@ -124,28 +132,29 @@ proc_out_t AddProcessor (ADD_DATA new_event, QUICctx ctx) {
 proc_out_t SendProcessor (SEND_PACKET new_event, QUICctx ctx) {
     pkt_t p = new_pkt();
     int total_bytes = 0;
+    QUICStream s;
     foreach (s in ctx.streams) {
         frame f;
         int space_in_packet = ctx.packet_size - total_bytes;
-        int data_in_stream = s.len() - s.m_nxt;
+        int data_in_stream = s.data.len() - s.m_nxt;
         int bytes_to_add;
-        if (data_in_stream >= space_in_packet && s.frame_size >= space_in_packet) {
+        if (data_in_stream >= space_in_packet && ctx.frame_size >= space_in_packet) {
             bytes_to_add = space_in_packet;
         } else {
-            if (space_in_packet > data_in_stream && s.frame_size > data_in_stream) {
+            if (space_in_packet > data_in_stream && ctx.frame_size > data_in_stream) {
                 bytes_to_add = space_in_packet;
             } else {
-                bytes_to_add = s.frame_size;
+                bytes_to_add = ctx.frame_size;
             }
         }
         if (total_bytes + bytes_to_add > ctx.packet_size) {
             break;
         }
         f.stream_id = s.stream_id;
-        f.add_data(s.data[s.m_nxt : s.m_nxt + bytes_to_add]);
+        f.data.add_data(s.data[s.m_nxt : s.m_nxt + bytes_to_add]);
         p.add_data(bytes(f));
     }
-    TCPheader th;
+    QUICHeader th;
     p.add_hdr(th);
 
     proc_out_t output;
@@ -175,10 +184,10 @@ proc_out_t ACKProcessor (ACK_PACKET new_event, QUICctx ctx) {
             stream pkt_data = lost_pkt.get_data();
             frame f;
             foreach (f in pkt_data) {
-                p.add_data(f);
+                p.add_data(f.data);
             }
         }
-        TCPheader th;
+        QUICHeader th;
         p.add_hdr(th);
     }
 
@@ -187,13 +196,8 @@ proc_out_t ACKProcessor (ACK_PACKET new_event, QUICctx ctx) {
     return output;
 }
 
-context QUICctx{
-    int packet_number;
-    list<QUICStream> streams;
-    list<pkt_t> sent_packets;
-    int frame_size;
-    int packet_size;
-    int sendBase = 0;
-    int windowSize = 1;
-    int k_packet_theshold = 0;
+dispatch table {
+    ADD_DATA -> {AddProcessor};
+    SEND_PACKET -> {SendProcessor};
+    ACK_PACKET -> {ACKProcessor};
 }

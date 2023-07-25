@@ -1,4 +1,4 @@
 run:
-	bison --defines=syntax.tab.hpp --output=syntax.tab.cpp -Wcounterexamples -v syntax.y
-	flex -o lex.yy.cpp lexical.l
-	g++ -std=c++11 syntax.tab.cpp lex.yy.cpp list_tree.cpp symbol_table.cpp -Wall -o compiler
+	bison --defines=parser.tab.hpp --output=parser.tab.cpp -Wcounterexamples -v parser.y
+	flex -o lex.yy.cpp tokens.l
+	g++ -std=c++11 parser.tab.cpp lex.yy.cpp src/list_tree.cpp src/symbol_table.cpp src/semantic.cpp -Wall -o compiler

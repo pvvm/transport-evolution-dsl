@@ -1,14 +1,16 @@
-#include "list_tree.hpp"
+#include "../include/list_tree.hpp"
 
 /*
 Allocate memory for a node and stores new values in it
 Returns: pointer to new node
 symbol: symbol of the node
+type: type used to check
 child: address of children vector
 */
-struct Node* createNode(string symbol, vector<struct Node*>& child) {
+struct Node* createNode(string symbol, string type, vector<struct Node*>& child) {
     Node* node = new Node;
     node->symbol = symbol;
+    node->type = type;
     node->children = child;
 
     child.clear();
@@ -71,7 +73,7 @@ void printTree(struct Node* node, int printSpacing, fstream& file) {
         cout << "|    ";
         file << "|    ";
     }
-    cout << "|-> " << node->symbol << endl;
+    cout << "|-> " << node->symbol << " " << node->type << endl;
     file << "|-> " << node->symbol << endl;
 
     for(struct Node* child : node->children) {

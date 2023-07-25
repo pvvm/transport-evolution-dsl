@@ -12,10 +12,12 @@ using namespace std;
 Struct to represent abstract syntax tree nodes
 
 symbol: string that represents the token
+type: used for type-checking
 children: vector of children nodes
 */
 typedef struct Node {
     string symbol;
+    string type;
     vector<struct Node*> children;
 }node;
 
@@ -24,9 +26,10 @@ Allocate memory for a node and stores new values in it
 
 Returns: pointer to new node
 string: symbol of the node
+string: type used to check
 vector<struct Node*>&: address of children vector
 */
-struct Node* createNode(string, vector<struct Node*> &);
+struct Node* createNode(string, string, vector<struct Node*> &);
 
 /*
 Turns parent and child nodes into siblings in a vector

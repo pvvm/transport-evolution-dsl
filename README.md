@@ -17,4 +17,4 @@ Execute:
 ./compiler Examples/tcp.tel
 
 Test if there are leaks:
-leaks -atExit -- ./compiler Examples/tcp.tel
+leaks -atExit -- ./compiler examples/tcp.tel

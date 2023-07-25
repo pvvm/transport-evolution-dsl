@@ -2,10 +2,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "syntax.tab.hpp"
+#include "parser.tab.hpp"
 
 int line = 1;
 int column = 1;
+int columnBegin = 1;
 
 void tokenCreator();
 %}
@@ -25,7 +26,6 @@ SCHEDULER_T     (sched)
 DISPATCH        (dispatch)
 CONTEXT_T       (context)
 PACKET_T        (pkt_t)
-PROC_OUT_T      (proc_out_t)
 
 CONST_INT       [0-9]+
 CONST_FLOAT     ([0-9]*"."[0-9]+)
@@ -91,15 +91,12 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 {CONTEXT_T}     {tokenCreator();
                 return CONTEXT_T;}
 
-{PROC_OUT_T}    {tokenCreator();
-                return PROC_OUT_T;}
-
     /* Integer constant */
 {CONST_INT}     {tokenCreator();
                 return CONST_INT;}
 
     /* Float constant */
-{CONST_FLOAT}     {tokenCreator();
+{CONST_FLOAT}   {tokenCreator();
                 return CONST_FLOAT;}
 
     /* High precedence mathematical operators (* /) */
@@ -172,6 +169,9 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "return"        {tokenCreator();
                 return RETURN;}
 
+"break"         {tokenCreator();
+                return BREAK;}
+
 "type"          {tokenCreator();
                 return TYPE;}
 
@@ -223,12 +223,6 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 "pop"           {tokenCreator();
                 return POP;}
 
-"enqueue"       {tokenCreator();
-                return ENQUEUE;}
-
-"next_event"    {tokenCreator();
-                return NEXT_EVENT;}
-
 {ID}            {tokenCreator();
                 return ID;}
 
@@ -268,14 +262,16 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
 
 "//".*          {}
 
-.               {printf("Lexical error: %s Line: %d Column: %d\n", yytext, line, column);
+.               {printf("Lexical error: %s\nLine: %d Column: %d\n", yytext, line, column);
                 column += yyleng;}
 
 %%
 
 void tokenCreator() {
     strcpy(yylval.token.symbol, yytext);
+    yylval.token.columnBegin = yylval.token.column;
     yylval.token.line = line;
     yylval.token.column = column;
+    
     column += yyleng;
 }

@@ -14,6 +14,7 @@ event SEND {
 event ACK {
     int flow_id;
     int acknum;
+    int time_event;
 }
 
 event TIMER {
@@ -22,10 +23,11 @@ event TIMER {
 
 sched myScheduler {
 
-    int send_drop(queue_t send_queue, SEND new_event) {
+    int send_drop(queue_t send_queue) {
         int most_recent = 0;
         int index = 0;
         int counter = 0;
+        SEND element;
 
         foreach (element in send_queue) {
             if(element.time_event > most_recent) {
@@ -38,49 +40,42 @@ sched myScheduler {
         return index;
     }
 
-    bool enqueue(event new_event) {
-
-        if (type(new_event) == SEND) {
-            send_queue.push(new_event);
-            return 1;
-        }
-        return 0;
-    }
 
     queue_t<SEND> send_queue(10, 20, send_drop);
 
-    int ack_drop(queue_t ack_queue, ACK new_event) {
+    int ack_drop(queue_t ack_queue) {
         int index = ack_queue.len() - 1;
 
         return index;
     }
 
-    bool enqueue(event new_event) {
-        if (type(new_event) == ACK) {
-            ack_queue.push(new_event);
-            return 1;
-        }
-        return 0;
-    }
 
     queue_t<ACK> ack_queue(5, 15, ack_drop);
 
 
-    int timer_drop(queue_t ack_queue, TIMER new_event) {
-        int index = ack_queue.len() - 1;
+    int timer_drop(queue_t timer_queue) {
+        int index = timer_queue.len() - 1;
 
         return index;
     }
 
-    bool enqueue(event new_event) {
-        if (type(new_event) == TIMER) {
+
+    queue_t<TIMER> timer_queue(3, 10, timer_drop);
+
+    bool enqueue(event_t new_event) {
+        if(type(new_event) == SEND) {
+            send_queue.push(new_event);
+            return 1;
+        }
+        else if (type(new_event) == ACK) {
+            ack_queue.push(new_event);
+            return 1;
+        } else if (type(new_event) == TIMER) {
             timer_queue.push(new_event);
             return 1;
         }
         return 0;
     }
-
-    queue_t<TIMER> timer_queue(3, 10, timer_drop);
 
     event_t next_event(queue_t send_queue, queue_t ack_queue, queue_t timer_queue) {
         if(timer_queue.len() > ack_queue.len() / 2) {
@@ -93,10 +88,26 @@ sched myScheduler {
     }
 }
 
-dispatch table {
-    SEND -> {SendProcessor};
-    ACK -> {ACKProcessor};
-    TIMER -> {TIMERProcessor};
+context myContext {
+    stream data;
+    list<int> startTime;
+    int m_Una;
+    int m_Nxt;
+    int m_start;
+    int m_Wnd;
+    int m_Iss;
+    int Smss;
+    int m_dupSeq;
+    int m_dupAmount;
+    int m_cnwd;
+    int m_ssthresh;
+    int m_segmentsize;
+    int m_dupThreshold;
+    int flow_size;
+    bool timeouthappened;
+    float SRTT;
+    float RTTVAR;
+    float RTO;
 }
 
 struct proc_out_t {
@@ -124,7 +135,6 @@ proc_out_t SendProcessor(SEND this_event, myContext ctx) {
     return output;
 }
 
-
 proc_out_t ACKProcessor(ACK this_event, myContext ctx) {
     proc_out_t output;
     if(!ctx.timeouthappened && ctx.m_Una < this_event.acknum) {
@@ -146,12 +156,12 @@ proc_out_t ACKProcessor(ACK this_event, myContext ctx) {
         }
     }
 
-    if (ctx.m_Una < this_event->acknum) {
+    if (ctx.m_Una < this_event.acknum) {
         ctx.m_Wnd = ctx.m_Wnd + ctx.m_segmentsize;
-        ctx.m_Una = this_event->acknum;
+        ctx.m_Una = this_event.acknum;
         timer.restart();
-        ctx.timeouthappend = false;
-        SEND new_event;
+        ctx.timeouthappened = false;
+        ACK new_event;
         new_event.time_event = 0;
         new_event.flow_id = this_event.flow_id;
         output.event_list.add(new_event);
@@ -162,6 +172,7 @@ proc_out_t ACKProcessor(ACK this_event, myContext ctx) {
 proc_out_t TIMERProcessor(TIMER this_event, myContext ctx) {
     proc_out_t output;
     ctx.timeouthappened = true;
+    pkt_t p = new_pkt();
     if (ctx.m_Una < ctx.flow_size) {
         if (ctx.m_Wnd / 2 >= 1) {
             ctx.m_Wnd = ctx.m_Wnd / 2;
@@ -174,7 +185,6 @@ proc_out_t TIMERProcessor(TIMER this_event, myContext ctx) {
         if (ctx.RTO < 3) {
             ctx.RTO = 3.0;
         }
-        pkt_t p = new_pkt();
         p.add_data(ctx.data[ctx.m_Una : ctx.m_Una + ctx.m_segmentsize]);
         p.add_hdr(th);
     }
@@ -183,25 +193,8 @@ proc_out_t TIMERProcessor(TIMER this_event, myContext ctx) {
     return output;
 }
 
-
-context myContext {
-    stream data;
-    list<int> startTime;
-    int m_Una;
-    int m_Nxt;
-    int m_start;
-    int m_Wnd;
-    int m_Iss;
-    int Smss;
-    int m_dupSeq;
-    int m_dupAmount;
-    int m_cnwd;
-    int m_ssthresh;
-    int m_segmentsize;
-    int m_dupThreshold;
-    int flow_size;
-    bool timeouthappened;
-    float SRTT;
-    float RTTVAR;
-    float RTO;
+dispatch table {
+    SEND -> {SendProcessor};
+    ACK -> {ACKProcessor};
+    TIMER -> {TIMERProcessor};
 }
