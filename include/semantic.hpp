@@ -63,12 +63,14 @@ bool alreadyDeclared(vector<struct Entry*>, string, int, string, int, int);
 
 string structCheck(vector<struct Entry*>, string, struct Node*, vector<int>, int, int);
 
-string builtinChecker(vector<struct Entry*>, string, string, struct Node*, int, int, vector<int>);
+string builtinChecker(vector<struct Entry*>, string, struct Node*, struct Node*, int, int, vector<int>);
 
 string indexChecker(vector<string>, string, int, int);
 
 bool breakChecker(int, int, int);
 
 bool returnChecker(string, string, int, int);
+
+string typeBuiltIn(string, string, vector<int>, vector<struct Entry*>);
 
 #endif

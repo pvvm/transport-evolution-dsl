@@ -1,4 +1,4 @@
-#include "symbol_table.hpp"
+#include "../include/symbol_table.hpp"
 
 /*
 Increases the new scope and adds it to scope list

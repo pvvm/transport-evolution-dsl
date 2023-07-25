@@ -1,9 +1,9 @@
-#include "semantic.hpp"
-#include "list_tree.hpp"
+#include "../include/semantic.hpp"
+#include "../include/list_tree.hpp"
 
 string attribChecker(string type1, string type2, string op) {
     string basicTypes = "int float bool";
-    string result = "";
+    string result = "error";
 
     if ((basicTypes.find(type1) != string::npos && basicTypes.find(type2) != string::npos) ||
     type1 == type2)
@@ -14,11 +14,12 @@ string attribChecker(string type1, string type2, string op) {
 
 string relatLogChecker(string type1, string type2, string op) {
     string allowedTypes = "int float bool";
-    string result = "";
+    string result = "error";
 
     // && || !
     // < > == != <= >=
-    if(allowedTypes.find(type1) != string::npos && allowedTypes.find(type2) != string::npos)
+    if((allowedTypes.find(type1) != string::npos && allowedTypes.find(type2) != string::npos) ||
+    (type1 == "event" && type2 == "event"))
         result = "bool";
     
     return result;
@@ -26,7 +27,7 @@ string relatLogChecker(string type1, string type2, string op) {
 
 string arithChecker(string type1, string type2, string op) {
     string allowedTypes = "int float bool";
-    string result = "";
+    string result = "error";
     // Neg (-)
     if(op == "-" && type2 == "" && allowedTypes.find(type1) != string::npos)
         result = type1;
@@ -43,7 +44,7 @@ string arithChecker(string type1, string type2, string op) {
 
 string sliceChecker(string type1, string type2, string op) {
     string allowedTypes = "int";
-    string result = "";
+    string result = "error";
 
     if ((allowedTypes.find(type1) != string::npos && allowedTypes.find(type2) != string::npos))
         result = "int";
@@ -79,7 +80,7 @@ string checkType(string type1, string type2, string op, int line, int column) {
     else if(op == sliceSymbol)
         result = sliceChecker(type1, type2, op);
 
-    if(result.empty()) {
+    if(result ==  "error") {
         if(!type2.empty()) {
             cout << "Semantic error. Incompatible types " << type1 << " and " << type2
             << " for operation " << op << ".\n" << "Line: " << line << " Column: " << column << endl;
@@ -206,12 +207,13 @@ string structCheck(vector<struct Entry*> table, string arg1, struct Node* node, 
 }
 
 string builtinChecker(vector<struct Entry*> table, string func,
-string objType, struct Node* node, int line,
+struct Node* objNode, struct Node* argNode, int line,
 int column, vector<int> scope) {
+    string objType = objNode->type;
     string noArgFuncs = "len pop get_hdr get_data";
     string oneArgFuncs = "add push add_hdr add_data";
     // Built-in functions without arguments
-    if(node == NULL) {
+    if(argNode == NULL) {
         if(func == "len" && (objType == "queue_t" || objType == "list" || objType == "stream"))
             return "int";
         // CHECK
@@ -230,10 +232,10 @@ int column, vector<int> scope) {
     } else {
         // Gets table entry for the argument
         string acceptedArgs = "pkt_t event_t header stream";
-        string argType; 
+        string argType;
         struct Entry* newArgEntry = NULL;
-        if(acceptedArgs.find(node->type) == string::npos) {
-            newArgEntry = findEntry(table, node->symbol, scope, "");
+        if(acceptedArgs.find(argNode->type) == string::npos) {
+            newArgEntry = findEntry(table, argNode->symbol, scope, "");
             if(newArgEntry == NULL) {
                 cout << "Semantic error. Incompatible type for object at left or for argument of " << func <<
                 ".\nLine: " << line << " Column: " << column << endl;
@@ -241,12 +243,16 @@ int column, vector<int> scope) {
             }
             argType = newArgEntry->type.back();
         } else
-            argType = node->type;
+            argType = argNode->type;
         if(func == "add" && ((objType == "list" && (argType == "pkt_t" || argType == "event"))
         || (objType == "stream" && argType == "stream")))
             return "";
-        if(func == "push" && objType == "queue_t" && argType == "event_t")
-            return "";
+        if(func == "push") {
+            struct Entry* newObjEntry = findEntry(table, objNode->symbol, scope, "");
+            if(newObjEntry->type.front() == "queue_t" &&
+            (newObjEntry->type.back() == argNode->type || argNode->type == "event_t"))
+                return "";
+        }
         if(func == "add_hdr" && objType == "pkt_t" && argType == "header")
             return "";
         if(func == "add_data" && (objType == "pkt_t" || objType == "stream") && argType == "stream")
@@ -297,4 +303,17 @@ bool returnChecker(string functionType, string returnType, int line, int column)
         return true;
     }
     return false;
+}
+
+string typeBuiltIn(string argType, string argSymbol, vector<int> scope, vector<struct Entry*> table) {
+    vector<string> commonTypes = {"float", "int", "bool", "list", "pkt_t"};
+    if(argType == "event_t")
+        return "event";
+
+    if(find(commonTypes.begin(), commonTypes.end(), argType) == commonTypes.end()) {
+        struct Entry* entry = findEntry(table, argType, scope, "");
+        return entry->type.front();
+    }
+
+    return argType;
 }

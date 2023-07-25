@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "syntax.tab.hpp"
+#include "parser.tab.hpp"
 
 int line = 1;
 int column = 1;
@@ -96,7 +96,7 @@ ID              [a-zA-Z][_a-zA-Z0-9]*
                 return CONST_INT;}
 
     /* Float constant */
-{CONST_FLOAT}     {tokenCreator();
+{CONST_FLOAT}   {tokenCreator();
                 return CONST_FLOAT;}
 
     /* High precedence mathematical operators (* /) */
