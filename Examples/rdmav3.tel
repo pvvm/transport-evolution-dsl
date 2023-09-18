@@ -1,0 +1,949 @@
+// Note: after finishing implementing rdma and revisiting tcp/quic, I really think we
+// should write a documentation for the DSL
+
+tx_module {
+    tx_queue_t<pkt_t> transmit_queue();
+}
+
+event RDMA_EVENT {
+    int wr_id;
+    int lkey;
+    addr_t addr;
+    int length;
+}
+
+event SEND_WQE : RDMA_EVENT {
+    int ack_req;
+}
+
+event WRITE_WQE : RDMA_EVENT {
+    int ack_req;
+    int rkey;
+    addr_t raddr; 
+}
+
+event READ_WQE : RDMA_EVENT {
+    int rkey;
+    addr_t raddr; 
+}
+
+// Note: Atomic operations use 64 bit fields
+event ATOMIC_WQE : RDMA_EVENT {
+    int swap_add;
+    int compare;
+    int rkey;
+    addr_t raddr;
+}
+
+event RECV_WQE : RDMA_EVENT {
+
+}
+
+event TRANSMIT_EVENT {
+    //int qp_id;
+    int wr_id;
+    int psn;
+    bool ack_req;
+}
+
+event ACK {
+    int qp_id;
+    int wr_id;
+    // everything prior and including this number is received
+    int psn; 
+}
+
+event NACK {
+    int qp_id;
+    int wr_id;
+    bool type_nack;
+    int psn;
+    float RNR_delay;
+}
+
+// Note: we'll need four types of data event, for the request and response of a read,
+// request of a write, and another for recv
+event READ_REQ_DATA {
+    int qp_id;
+    int wr_id;
+    int psn;
+    addr_t raddr;
+    int rkey;
+    int opcode;
+}
+
+event READ_RESP_DATA {
+    int qp_id;
+    int wr_id;
+    int psn;
+    stream data;
+}
+
+event WRITE_DATA {
+    int qp_id;
+    int wr_id;
+    int psn;
+    bool ack_req;
+    addr_t raddr;
+    int rkey;
+    int length;
+}
+
+event RECV_DATA {
+    int qp_id;
+    int wr_id;
+    int psn;
+    bool ack_req;
+    stream data;
+    int opcode;
+}
+
+event ATOMIC_DATA {
+    int qp_id;
+    int swap_add;
+    int compare;
+    int rkey;
+    addr_t raddr;
+    int length;
+}
+
+sched ROCEv2Sched {
+
+    int repeat_drop(queue_t TIMER_Queue) {
+        return 0;   // always drops the first packet of the queue
+    }
+
+    queue_t<RDMA_EVENT> SEND_Queue();
+    queue_t<RDMA_EVENT> RECV_Queue();
+    queue_t<RATE_TIMER> TIMER_Queue(0, 1, repeat_drop);
+    queue_t<ACK> ACK_Queue();
+    queue_t<NACK> NACK_Queue();
+
+    
+    
+
+    bool enqueue(event_t new_event) {
+        if(type(new_event) == RDMA_EVENT::SEND_WQE ||
+        type(new_event) == RDMA_EVENT::WRITE_WQE ||
+        type(new_event) == RDMA_EVENT::READ_WQE) {
+            SEND_Queue.push(new_event);
+            return 1;
+        } else if(type(new_event) == RDMA_EVENT::RECV_WQE) {
+            RECV_Queue.push(new_event);
+            return 1;
+        } else if (type(new_event) == RATE_TIMER) {
+            TIMER_Queue.push(new_event);
+            return 1;
+        } else if (type(new_event) == ACK) {
+            ACK_Queue.push(new_event);
+            return 1;
+        } else if (type(new_event) == NACK) {
+            NACK_Queue.push(new_event);
+            return 1;
+        } else if (type(new_event) == CNP) {
+            CNP_Queue.push(new_event);
+            return 1;
+        } else if (type(new_event) == DATA) {
+            DATA_Queue.push(new_event);
+            return 1;
+        }
+        return 0;
+    }
+
+    // New: special queue (global transmit queue)
+
+    // Note: priority
+    // R: NACK / CNP (TIMER vs ACK) DATA / RDMA_EVENT
+    // NACK / ACK TIMER DATA / RDMA_EVENT
+    // Check round robin (deficit and weighted) vs. Aging
+    event_t next_event(queue_t SEND_Queue, queue_t RECV_Queue, queue_t TIMER_Queue
+    queue_t ACK_Queue, queue_t NACK_Queue, queue_t CNP_Queue, queue_t DATA_Queue) {
+
+    }
+}
+
+interm_output iterm_out {
+}
+
+struct work_comp {
+    int wr_id;
+    int status;
+    int opcode;
+    int qp_id;
+    int length;
+}
+
+header UDPHeader {
+    int src_port;
+    int dst_port;
+    int length;
+    int checksum;
+}
+
+header BTHeader {
+    int opcode;
+    bool ack_req;
+    int dest_qp;
+    int psn;
+}
+
+header RETHeader {
+    int raddr;
+    int rkey;
+    int length;
+}
+
+header AETHeader {
+    // Note: syndrome is represented as a binary originally. Perhaps we should have a way to represent binary numbers
+    // For now, I'll split it in 2 bools and 1 int
+    bool ack;           // 1 if ack, 0 if nack
+    bool type_nack;     // 1 if OOO, 0 if RNR
+    int credit_count;
+    int MSN;
+    float RNR_delay;
+}
+
+header AtomicETHeader {
+    addr_t raddr;
+    int rkey;
+    int swap_add;
+    int compare;
+}
+
+header AtomicAckETHeader {
+    int original_data;
+}
+
+struct packet_list {
+    pkt_t packet;
+    int psn;
+    bool ack_req;
+    int wr_id;
+    bool acked;
+}
+
+context myContext {
+    int qp_id;
+    int lkey;
+    list<RDMA_EVENT> SQ_list;
+    list<RDMA_EVENT> RQ_list;
+    list<packet_list> sent_packets;
+    int nPSN;
+    float transport_timer;
+    stream CQ;
+
+    // Responder side
+    int ePSN;
+    int MSN;
+    int credit_count;
+    int recv_first_psn;
+    int write_first_psn;
+
+    int MTU;
+    int init_sqn;
+    int dest_qp;
+    int src_port;
+    int dst_port;
+}
+
+void SendProcessor(RDMA_EVENT::SEND_WQE ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    ctx.SQ_list.add(ev);
+
+    if(ev.lkey == ctx.lkey) {
+        stream buffer;
+        buffer.mem_append(ev.addr, ev.length);
+        int first_psn;
+
+        for(int index = 0; index < ev.length; index = index + ctx.MTU) {
+            pkt_t p = new_pkt();
+
+            int data_len = ctx.MTU;
+            if(index + ctx.MTU < ev.length)
+                p.add_data(buffer[index : index + ctx.MTU]);
+            else { // if the last packet doesn't match MTU
+                p.add_data(buffer[index : ev.length]);
+                data_len = env.length - index;
+            }
+
+            BTHeader bth;
+            if(ev.length <= ctx.MTU) {
+                bth.opcode = 4;     // only 1 packet
+                last_packet = true;
+                first_psn = ctx.nPSN;
+            } else if(index == 0) {
+                bth.opcode = 0;     // first packet
+                first_psn = ctx.nPSN;
+            } else if(index + ctx.MTU >= ev.length)
+                bth.opcode = 2;     // last packet
+            else
+                bth.opcode = 1;     // middle packet
+            bth.ack_req = ev.ack_req;
+            bth.dest_qp = ctx.dest_qp;
+            // Note: adds psn to the packet and adds 1 to nPSN
+            bth.psn = ctx.nPSN;
+            ctx.nPSN = ctx.nPSN + 1;
+
+            UDPHeader udp;
+            udp.src_port = ctx.src_port;
+            udp.dst_port = ctx.dst_port;
+            udp.length = 8 + bth.len() + data_len;
+            // checksum(name_of_the_algorithm)
+
+            p.add_dr({udp, bth});
+
+            packet_list save_packet;
+            // Note: could assign work from one packet to another? or should we have a copy function?
+            save_packet.packet = p;
+            save_packet.psn = bth.psn;
+            save_packet.ack_req = bth.ack_req;
+            save_packet.wr_id = ev.wr_id;
+            save_packet.acked = false;
+            ctx.sent_packets.add(save_packet);
+            packets.add(p);
+        }
+        TRANSMIT_EVENT new_event;
+        new_event.wr_id = ev.wr_id;
+        new_event.psn = first_psn;
+        new_event.ack_req = ev.ack_req;
+        events.add(new_event);
+    }
+}
+
+void WriteProcessor(RDMA_EVENT::WRITE_WQE ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    ctx.SQ_list.add(ev);
+
+    if(ev.lkey == ctx.lkey) {
+        stream buffer;
+        buffer.mem_append(ev.addr, ev.length);
+        RETHeader reth;
+        int first_psn;
+
+        // Note: change index < ev.length to, instead iterate according to the desired rate
+        for(int index = 0; index < ev.length; index = index + ctx.MTU) {
+            pkt_t p = new_pkt();
+
+            int data_len = ctx.MTU;
+            if(index + ctx.MTU < ev.length)
+                p.add_data(buffer[index : index + ctx.MTU]);
+            else { // if the last packet doesn't match MTU
+                p.add_data(buffer[index : ev.length]);
+                data_len = ev.length - index;
+            }
+
+            if(index == 0) {
+                reth.addr = ev.raddr;
+                reth.rkey = ev.rkey;
+                reth.length = ev.length;
+            }
+
+            BTHeader bth;
+            if(ev.length <= ctx.MTU) {
+                bth.opcode = 10;     // only 1 packet
+                first_psn = ctx.nPSN;
+            } else if(index == 0) {
+                bth.opcode = 6;     // first packet
+                first_psn = ctx.nPSN;
+            } else if(index + ctx.MTU >= ev.length)
+                bth.opcode = 8;     // last packet
+            else
+                bth.opcode = 7;     // middle packet
+            bth.ack_req = ev.ack_req;
+            bth.dest_qp = ctx.dest_qp;
+            bth.psn = ctx.nPSN;
+            ctx.first_psn = ctx.nPSN;
+            ctx.nPSN = ctx.nPSN + 1;
+
+            UDPHeader udp;
+            udp.src_port = ctx.src_port;
+            udp.dst_port = ctx.dst_port;
+            udp.length = 8 + bth.len() + data_len;
+            if(index == 0) {
+                udp.length = udp.length + eth.len();
+                p.add_hdr({udp, bth, reth});
+            } else
+                p.add_hdr({udp, bth});
+
+            packet_list save_packet;
+            // Note: could assign work from one packet to another? or should we have a copy function?
+            save_packet.packet = p;
+            save_packet.psn = bth.psn;
+            save_packet.ack_req = bth.ack_req;
+            save_packet.wr_id = ev.wr_id;
+            save_packet.acked = false;
+            ctx.sent_packets.add(save_packet);
+            packets.add(p);
+        }
+        TRANSMIT_EVENT new_event;
+        new_event.wr_id = ev.wr_id;
+        new_event.psn = first_psn;
+        new_event.ack_req = ev.ack_req;
+        events.add(new_event);
+    }
+}
+
+// Note: we should have some way to get the credit count as RECV_WQE's length
+// R: having a RQ list for the recv events and making recv events have a higher priority
+void RecvProcessor(RDMA_EVENT::RECV_WQE ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    ctx.RQ_list.add(ev);
+    ctx.credit_count = ctx.credit_cout + 1;
+}
+
+void ReadProcessor(RDMA_EVENT::READ_WQE ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    ctx.SQ_list.add(ev);
+
+    pkt_t p = new_pkt();
+    int first_psn;
+
+    RETHeader reth;
+    reth.addr = ev.raddr;
+    reth.rkey = ev.rkey;
+    reth.length = ev.length;
+
+    BTHeader bth;
+    bth.opcode = 12;
+    bth.dest_qp = ctx.dest_qp;
+    bth.psn = ctx.nPSN;
+    first_psn = ctx.nPSN;
+    // Note: maybe we'll need a floor/ceiling function or % to get the remainder of the division
+    ctx.nPSN = ctx.nPSN + ceil(ev.length / ctx.MTU);
+
+    UDPHeader udp;
+    udp.src_port = ctx.src_port;
+    udp.dst_port = ctx.dst_port;
+    udp.length = 8 + bth.len() + eth.len();
+
+    p.add_hdr({udp, bth, eth});
+
+    // Note: I'm creating ceil(ev.length / ctx.MTU) copies of the read request packet.
+    // It is used to identify unacknowledged read response packets
+    for(int i = 0; i < ceil(ev.length / ctx.MTU); i = i + 1) {
+        packet_list save_packet;
+        // Note: could assign work from one packet to another? or should we have a copy function?
+        save_packet.packet = p;
+        save_packet.psn = bth.psn + i;
+        save_packet.ack_req = true;
+        save_packet.wr_id = ev.wr_id;
+        save_packet.acked = false;
+        ctx.sent_packets.add(save_packet);
+    }
+    // make sure to not retransmit the same packet
+    TRANSMIT_EVENT new_event;
+    new_event.wr_id = ev.wr_id;
+    new_event.psn = first_psn;
+    new_event.ack_req = ev.ack_req;
+    events.add(new_event);
+}
+
+void AtomicProcessor(RDMA_EVENT::READ_WQE ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    ctx.SQ_list.add(ev);
+
+    pkt_t p = new_pkt();
+    int first_psn;
+
+    AtomicETHeader aeth;
+    aeth.raddr = ev.raddr;
+    aeth.rkey = ev.rkey;
+    aeth.swap_add = ev.swap_add;
+    aeth.compare = aeth.compare;
+    p.add_hdr(aeth);
+
+    BTHeader bth;
+    // Note: is it ok if I consider that for fetchAdd operations the compare will be -1? (Or some other value)
+    // Because aeth necessarily takes compare, even if it is a fetchAdd operation 
+    if(aeth.compare == -1)  // fetchAdd
+        bth.opcode = 20;
+    else                    // compSwap
+        bth.opcode = 19;
+    bth.dest_qp = ctx.dest_qp;
+    bth.psn = ctx.nPSN;
+    ctx.nPSN = ctx.nPSN + 1;
+
+    UDPHeader udp;
+    udp.src_port = ctx.src_port;
+    udp.dst_port = ctx.dst_port;
+    udp.length = 8 + bth.len() + aeth.len();
+
+    p.add_hdr({udp, bth, aeth});
+    packet_list save_packet;
+    // Note: could assign work from one packet to another? or should we have a copy function?
+    save_packet.packet = p;
+    save_packet.psn = bth.psn + i;
+    save_packet.ack_req = true;
+    save_packet.wr_id = ev.wr_id;
+    save_packet.acked = false;
+    ctx.sent_packets.add(save_packet);
+
+    TRANSMIT_EVENT new_event;
+    new_event.wr_id = ev.wr_id;
+    new_event.psn = ctx.nPSN - 1;
+    new_event.ack_req = true;
+    events.add(new_event);
+}
+
+void TransmitProcessor(TRANSMIT_EVENT ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {\
+
+    int sent_packets = 0;
+    bool last_packet = true;
+    for(packet in ctx.packet_list) {
+        if(packet.psn >= ctx.first_psn) {
+            sent_packets = sent_packets + 1;
+            packets.add(packet);
+        }
+
+        // Note: create a condition to break this loop if the number of packets sent reach a certain rate
+        if(sent_packets ... something_rate) {
+            last_packet = false;
+            break;
+        }
+    }
+
+    if(!last_packet) {
+        TRANSMIT_EVENT new_event;
+        new_event.wr_id = ev.wr_id;
+        new_event.psn = ev.psn + sent_packets;
+        new_event.ack_req
+        events.add(new_event);
+    }
+
+    if(ev.ack_req) {
+        // Note: maybe we could have a syntax that allows for the creation of an event if the timer reaches its end
+        // timer.set_duration(ctx.transport_timer, TRANSMIT_EVENT event);
+        timer.set_duration(ctx.transport_timer);
+        // R: event is a parameter to start
+        timer.start(ev);
+    }
+}
+
+// Note: as well as four data event types, we should have one ep for each
+void RecvDataProcessor(RECV_DATA ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    pkt_t p = new_pkt();
+
+    if(ctx.credit_count > 0) {
+        if(ev.psn == ctx.ePSN && ev.opcode == 0 || ev.opcode == 4) {        // saves the psn of send operation's first packet
+            ctx.recv_first_psn = ev.psn;
+        }
+        AETHeader aeth;
+        if(ev.psn <= ctx.ePSN) {        // duplicate or expected PSN
+            aeth.ack = true;
+            aeth.MSN = ctx.MSN;
+            if(ev.psn == ctx.ePSN && ev.opcode == 2 || ev.opcode == 4)        // last or only packet
+                ctx.credit_count = ctx.credit_count - 1;
+            aeth.credit_count = ctx.credit_count;
+        } else {                        // out-of-order: NACK
+            aeth.ack = false;
+            aeth.type_nack = true;
+        }
+        BTHeader bth;
+        bth.opcode = 17;
+        bth.dest_qp = ctx.dest_qp;
+        bth.psn = ctx.ePSN;
+        UDPHeader udp;
+        udp.src_port = ctx.src_port;
+        udp.dst_port = ctx.dst_port;
+        udp.length = 8 + bth.len() + aeth.len();
+        p.add_hdr({udp, bth, aeth});
+
+        if(ev.psn == ctx.ePSN) {
+            ctx.ePSN = ctx.ePSN + 1;
+            addr_t addr = ctx.RQ_list[0].addr;
+            mem_write(addr, ev.data, ev.psn - ctx.recv_first_psn, ev.data.len());
+
+            if(ev.opcode == 2 || ev.opcode == 4) {
+                work_comp cqe;
+                cqe.wr_id = ev.wr_id;
+                cqe.status = 0;
+                cqe.opcode = 6;
+                cqe.qp_id = ev.qp_id;
+                cqe.length = ev.data.len();
+                // Note: should we have another operation to append to a stream?
+                ctx.CQ.add(byte(cqe));
+
+                // Note: actually, we don't have an operation to remove elements from a list
+                // Maybe we could use the following sintax, which always remove the first element of the list
+                ctx.RQ_list.remove();
+            }
+        }
+        if(ev.ack_req || !aeth.ack)     // sends packet if requires ack or is a nack
+            packets.add(p);
+
+    } else {                // there are no recv events posted
+        AETHeader aeth;
+        aeth.ack = false;
+        aeth.type_nack = false;
+        BTHeader bth;
+        bth.opcode = 17;
+        bth.dest_qp = ctx.dest_qp;
+        bth.psn = ctx.ePSN;
+        UDPHeader udp;
+        udp.src_port = ctx.src_port;
+        udp.dst_port = ctx.dst_port;
+        p.add_hdr({udp, bth, aeth});
+        packets.add(p);
+    }
+}
+
+// Note: similar to RecvDataProcessor, but I removed things related to credit count and CQE
+void WriteDataProcessor(WRITE_DATA ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    if(ev.psn == ctx.ePSN && ev.opcode == 6 || ev.opcode == 10) {        // saves the psn of write operation's first/only packet
+        ctx.write_first_psn = ev.psn;
+    }
+    AETHeader aeth;
+    if(ev.psn <= ctx.ePSN) {        // duplicate or expected PSN
+        aeth.ack = true;
+        aeth.MSN = ctx.MSN;
+        aeth.credit_count = ctx.credit_count;
+    } else {                        // out-of-order: NACK
+        aeth.ack = false;
+        aeth.type_nack = true;
+    }
+    BTHeader bth;
+    bth.opcode = 17;
+    bth.dest_qp = ctx.dest_qp;
+    bth.psn = ctx.ePSN;
+    UDPHeader udp;
+    udp.src_port = ctx.src_port;
+    udp.dst_port = ctx.dst_port;
+    udp.length = 8 + bth.len() + aeth.len();
+    p.add_hdr({udp, bth, aeth});
+
+    if(ev.psn == ctx.ePSN) {
+        ctx.ePSN = ctx.ePSN + 1;
+        addr_t addr = ctx.RQ_list[0].addr;
+        mem_write(addr, ev.data, ev.psn - ctx.write_first_psn, ev.data.len());
+    }
+    if(ev.ack_req || !aeth.ack)     // sends packet if requires ack or is a nack
+        packets.add(p);
+}
+
+void ReadReqProcessor(READ_REQ_DATA ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    pkt_t p = new_pkt();
+
+    AETHeader aeth;
+    BTHeader bth;
+    if(ev.psn == ctx.ePSN) {        // expected PSN
+        stream buffer;
+        buffer.mem_append(ev.raddr, ev.length);
+        bool last_packet = false;
+
+        for(int index = 0; index < ctx.length; index = index + ctx.MTU) {
+            int data_len = ctx.MTU;
+            if(index + ctx.MTU < ev.length)
+                p.add_data(buffer[index : index + ctx.MTU]);
+            else { // if the last packet doesn't match MTU
+                p.add_data(buffer[index : ev.length]);
+                data_len = ev.length - index;
+            }
+            aeth.ack = true;
+            aeth.MSN = ctx.MSN;
+            aeth.credit_count = ctx.credit_count;
+            if(ev.length <= ctx.MTU) {
+                bth.opcode = 16;     // only 1 packet
+                last_packet = true;
+            } else if(index == 0)
+                bth.opcode = 13;     // first packet
+            else if(index + ctx.MTU >= ev.length) {
+                bth.opcode = 15;     // last packet
+                last_packet = true;
+            } else
+                bth.opcode = 14;     // middle packet
+            bth.dest_qp = ctx.dest_qp;
+            bth.psn = ctx.ePSN;
+            UDPHeader udp;
+            udp.src_port = ctx.src_port;
+            udp.dst_port = ctx.dst_port;
+            if(bth.opcode != 14) {
+                udp.length = 8 + bth.len() + aeth.len() + data_len;
+                p.add_hdr({udp, bth, aeth});
+            }
+            else {
+                udp.length = 8 + bth.len() + data_len;
+                p.add_hdr({udp, bth});
+            }
+
+            // create a EP for the responder side (transmit/retransmit)
+
+            packets.add(p);
+            ctx.ePSN = ctx.ePSN + 1;
+        }
+        // Note: maybe we'll probably need a different TRANSMIT_EVENT processor, just for read responses
+        if(!last_packet) {
+            TRANSMIT_EVENT new_event;
+            new_event.wr_id = ev.wr_id;
+            new_event.psn = first_psn;
+            new_event.ack_req = true;
+            events.add(new_event);
+        }
+
+    } else if(ev.psn < ctx.ePSN) {  // duplicate
+        aeth.ack = true;
+        aeth.MSN = ctx.MSN;
+        aeth.credit_count = ctx.credit_count;
+        bth.opcode = 17;
+        bth.dest_qp = ctx.dest_qp;
+        bth.psn = ctx.ePSN;
+        UDPHeader udp;
+        udp.src_port = ctx.src_port;
+        udp.dst_port = ctx.dst_port;
+        udp.length = 8 + bth.len() + aeth.len();
+        p.add_hdr({udp, bth, aeth});
+        packets.add(p);
+    } else {                        // out-of-order: NACK
+        aeth.ack = false;
+        aeth.type_nack = true;
+        bth.opcode = 17;
+        bth.dest_qp = ctx.dest_qp;
+        bth.psn = ctx.ePSN;
+        UDPHeader udp;
+        udp.src_port = ctx.src_port;
+        udp.dst_port = ctx.dst_port;
+        udp.length = 8 + bth.len() + aeth.len();
+        p.add_hdr({udp, bth, aeth});
+        packets.add(p);
+    }
+}
+
+void ReadRespProcessor(READ_RESP_DATA ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    // Note: if the response's PSN was already acked, simply ignore the event. Maybe this
+    // might be important for other EPs
+    if(ev.psn >= ctx.sent_packets[0].psn) {
+        // Note: stop if a response packet is received
+        timer.stop();
+
+        int pkt_counter = 0;
+        int psn_ack_req = ev.psn;
+
+        for(packet in ctx.sent_packets) {
+            if(packet.ack_req) {
+                psn_ack_req = packet.psn;       // gets the psn of the oldest packet that requires ack
+                break;
+            } else if(packet.psn > ev.psn)
+                break;
+            pkt_counter = pkt_counter + 1;
+        }
+
+        if(psn_ack_req != ev.psn) {             // if there is a packet that requires ack before the acked packet
+            TRANSMIT_EVENT new_event;
+            new_event.psn = psn_ack_req;
+            new_event.ack_req = ev.true;
+            events.add(new_event);
+        } else {
+            BTHeader bth = ctx.packet_list[pkt_counter].packet.get_hdr(bth);
+            addr_t addr = ctx.packet_list[pkt_counter].addr;
+            mem_write(addr, ev.data, ev.psn - bth.psn, ev.data.len());
+        }
+
+        // change remove to pop
+        for(int i = 0; i <= pkt_counter; i = i + 1)
+            ctx.sent_packets.pop();
+    
+        // Note: restart timer if we expect more responses
+        for(packet in ctx.sent_packets) {
+            if(packet.ack_req) {
+                timer.restart();
+                break;
+            }
+        }
+    }
+}
+
+void AtomicDataProcessor(ATOMIC_DATA ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    pkt_t p = new_pkt();
+
+    AtomicAckETHeader atomicAeth;
+    AETHeader aeth;
+    BTHeader bth;
+    if(ev.psn == ctx.ePSN) {        // expected PSN
+        stream local_data;
+        local_data.mem_append(ev.raddr, ev.length);
+        // Note: how should we transform a stream into an integer, to compare or add with ev.compare and ev.switch_add? (or vice-versa)
+        int data = int(local_data);
+
+        if(ev.compare == -1) {      // fetchAdd
+            int result = data + ev.swap_add;
+            stream result_data;
+            result_data.append(byte(result));
+            mem_write(ev.raddr, result_data, 0, result_data.len());
+        } else {                    // compSwap
+            if(ev.compare == data) {
+                stream result_data;
+                result_data.append(byte(ev.swap_add));
+                mem_write(ev.raddr, result_data, 0, result_data.len());
+            }
+        }
+        atomicAeth.original_data = data;
+
+        aeth.ack = true;
+        aeth.MSN = ctx.MSN;
+        aeth.credit_count = ctx.credit_count;
+
+        bth.opcode = 18;
+        bth.dest_qp = ctx.dest_qp;
+        bth.psn = ctx.ePSN;
+
+        UDPHeader udp;
+        udp.src_port = ctx.src_port;
+        udp.dst_port = ctx.dst_port;
+
+        udp.length = 8 + bth.len() + aeth.len() + atomicAeth.len();
+        p.add_hdr({udp, bth, aeth, atomicAeth});
+        packets.add(p);
+
+        ctx.ePSN = ctx.ePSN + 1;
+
+    } else if(ev.psn < ctx.ePSN) {  // duplicate
+        // Note: in case it is a duplicate or OOO packet, we are going to send a common acknowledgement packet
+        aeth.ack = true;
+        aeth.MSN = ctx.MSN;
+        aeth.credit_count = ctx.credit_count;
+        bth.opcode = 17;
+        bth.dest_qp = ctx.dest_qp;
+        bth.psn = ctx.ePSN;
+        UDPHeader udp;
+        udp.src_port = ctx.src_port;
+        udp.dst_port = ctx.dst_port;
+        udp.length = 8 + bth.len() + aeth.len();
+        p.add_hdr({udp, bth, aeth});
+        packets.add(p);
+    } else {                        // out-of-order: NACK
+        aeth.ack = false;
+        aeth.type_nack = true;
+        bth.opcode = 17;
+        bth.dest_qp = ctx.dest_qp;
+        bth.psn = ctx.ePSN;
+        UDPHeader udp;
+        udp.src_port = ctx.src_port;
+        udp.dst_port = ctx.dst_port;
+        udp.length = 8 + bth.len() + aeth.len();
+        p.add_hdr({udp, bth, aeth});
+        packets.add(p);
+    }   
+}
+
+// Note: maybe we won't even need a separate ACK event/processor for atomic acks, since it does the same thing as
+// a common ack, but it has the original_data value from AtomicAETH. And this value doesn't seem to matter much
+// Maybe it's implementation-specific
+void AtomicACKProcessor(ATOMIC_ACK ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+}
+
+void AckProcessor(ACK ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    timer.stop();
+
+    int pkt_counter = 0;
+    int psn_ack_req = ev.psn;
+
+    for(packet in ctx.sent_packets) {
+        if(packet.ack_req) {
+            psn_ack_req = packet.psn;       // gets the psn of the oldest packet that requires ack
+            break;
+        } else if(packet.psn > ev.psn)
+            break;
+        pkt_counter = pkt_counter + 1;
+    }
+
+    for(int i = 0; i <= pkt_counter; i = i + 1)
+        ctx.sent_packets.remove();
+
+    if(psn_ack_req != ev.psn) {             // if there is a packet that requires ack before the acked packet
+        TRANSMIT_EVENT new_event;
+        new_event.psn = psn_ack_req;
+        new_event.ack_req = ev.true;
+        events.add(new_event);
+    }
+
+    for(packet in ctx.sent_packets) {
+        if(packet.ack_req) {
+            timer.restart();
+            break;
+        }
+    }
+}
+
+void NackProcessor(NACK ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    timer.stop();
+
+    // Note: nack will kind of work in a similar way to ack, in a sense that it will implicitly
+    // acknowledge all previous unacked packets, but will retransmit from oldest unacked packet (or the
+    // nacked psn). The only difference is that it will necessarily retransmit something
+    if(ev.type_nack) {
+        int pkt_counter = 0;
+        int psn_ack_req = ev.psn;
+        int wr_id = ctx.sent_packets[0].wr_id;
+
+        for(packet in ctx.sent_packets) {
+            if(wr_id != packet.wr_id) {         // removes events that were completely acknowledged
+                wr_id = packet.wr_id;
+                ctx.SQ_list.remove();
+            }
+
+            if(packet.ack_req) {
+                psn_ack_req = packet.psn;       // gets the psn of the oldest packet that requires ack
+                break;
+            } else if(packet.psn > ev.psn)
+                break;
+            
+            pkt_counter = pkt_counter + 1;
+        }
+
+        for(int i = 0; i <= pkt_counter; i = i + 1)
+            ctx.sent_packets.remove();
+
+        TRANSMIT_EVENT new_event;
+        new_event.psn = psn_ack_req;
+        new_event.ack_req = ev.true;
+        events.add(new_event);
+        
+    } else {
+        // Note: maybe we could have a syntax that allows for the creation of an event if the timer reaches its end
+        // timer.set_duration(ctx.transport_timer, RATE_TIMER event);
+        TRANSMIT_EVENT new_event;
+        new_event.psn = ev.psn;
+        new_event.ack_req = ev.true;
+        events.add(new_event);
+
+        timer.set_duration(ev.RNR_delay);
+        timer.start(new_event);
+    }
+}
+
+// Note: we could have a single EP to remove elements from SQ if the parameter for the event wasn't required
+void RemoveSQProcessor(/*{ACK, READ_RESP_DATA, NACK} ev, */myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+    int remove_counter = 0;
+
+    for(event in ctx.SQ_list) {
+        if(ctx.packet_list[0].wr_id != event.wr_id)
+            remove_counter = remove_counter + 1;
+        else
+            break;
+    }
+
+    for(int i = 0; i < remove_counter; i = i + 1) {
+        work_comp cqe;
+        cqe.wr_id = ctx.SQ_list[i].wr_id;
+        cqe.status = 0;
+        // Note: could we use type(ctx.SQ_list[i]) to get the type of the event and, then, decide the opcode?
+        //cqe.opcode = 6;
+        cqe.qp_id = ctx.SQ_list[i].qp_id;
+        cqe.length = ctx.SQ_list[i].data.len();
+        // Note: should we have another operation to append to a stream?
+        ctx.CQ.stream_append(byte(cqe));
+        ctx.SQ_list.remove();
+    }
+}
+
+// TODO: create atomic operations. But they will be very similar to read
+ 
+dispatch table {
+    RDMA_EVENT::SEND_WQE -> {SendProcessor};
+    RDMA_EVENT::WRITE_WQE -> {WriteProcessor};
+    RDMA_EVENT::RECV_WQE -> {RecvProcessor};
+    RDMA_EVENT::READ_WQE -> {ReadProcessor};
+    RDMA_EVENT::ATOMIC_WQE -> {AtomicProcessor};
+    TRANSMIT_EVENT -> {TransmitProcessor};
+    RECV_DATA -> {RecvDataProcessor};
+    WRITE_DATA -> {WriteDataProcessor};
+    READ_REQ_DATA -> {ReadReqProcessor};
+    READ_RESP_DATA -> {ReadRespProcessor, RemoveSQProcessor};
+    ATOMIC_DATA -> {AtomicDataProcessor};
+    ACK -> {AckProcessor, RemoveSQProcessor};
+    NACK -> {NackProcessor, RemoveSQProcessor};
+}

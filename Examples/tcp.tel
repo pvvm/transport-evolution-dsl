@@ -40,7 +40,6 @@ sched myScheduler {
         return index;
     }
 
-
     queue_t<SEND> send_queue(10, 20, send_drop);
 
     int ack_drop(queue_t ack_queue) {
@@ -90,7 +89,7 @@ sched myScheduler {
 
 context myContext {
     stream data;
-    list<int> startTime;
+    list<float> startTime;
     int m_Una;
     int m_Nxt;
     int m_start;
@@ -129,6 +128,7 @@ proc_out_t SendProcessor(SEND this_event, myContext ctx) {
         output.packet_list.add(p);
 
         float now = time();
+        // Change this. The original code uses map.
         ctx.startTime[ctx.m_Iss + ctx.m_Nxt + ctx.m_segmentsize] = now;
     }
 
@@ -136,7 +136,6 @@ proc_out_t SendProcessor(SEND this_event, myContext ctx) {
 }
 
 proc_out_t ACKProcessor(ACK this_event, myContext ctx) {
-    proc_out_t output;
     if(!ctx.timeouthappened && ctx.m_Una < this_event.acknum) {
         float now = time();
         float R = now - ctx.startTime[this_event.acknum];

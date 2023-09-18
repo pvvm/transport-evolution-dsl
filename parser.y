@@ -88,7 +88,7 @@ WHAT IF WE CHANGE FROM id.get_hdr<id>() to id.get_hdr()?
 
 ADD SEMANTIC ANALYSIS FOR QUEUE DECLARATION?
 
-SHOULD TIME OPS WOKS AS BUILT IN FUNCTIONS?
+ADD SEMANTIC ANALYSIS FOR TIME BUILTIN AND FOREACH
 
 IN for(something in listSomething), should something be declared
 previously?
