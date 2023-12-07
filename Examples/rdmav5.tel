@@ -109,6 +109,10 @@ event ATOMIC_DATA {
     int length = 4;
 }
 
+event RESPONDER_EVENT {
+    int qp_id;
+}
+
 event CNP_CHECK {
     int qp_id;
 }
@@ -130,6 +134,7 @@ event ALPHA_CHECK {
 }
 
 interm_output iterm_out {
+    int psn = -1;
 }
 
 struct work_comp {
@@ -199,9 +204,9 @@ struct packet_info {
     int SSN;
 }
 
-struct ack_wait {
-    timer_t ack_timer;
-    int psn;
+struct responder_packet_info {
+    pkt_t packet;
+    int wr_id;
 }
 
 context myContext {
@@ -215,6 +220,7 @@ context myContext {
     stream CQ;
 
     // Responder side
+    list<responder_packet_info> responder_packets;
     int ePSN;
     int MSN;
     int credit_count = 0;
@@ -246,7 +252,8 @@ context myContext {
 
     // Timers
     // TODO: check if each packet should have a ack_timer
-    list<ack_wait> ack_timeout;
+    // A: it seems that there is only one timer_ack for all packets
+    timer_t timer_ack_timeout;
     timer_t timer_cnp;
     timer_t timer_alpha;
     timer_t timer_DCQCN_counter;
@@ -307,14 +314,14 @@ rx_parser rx_module {
             return new_event;
 
         } else if(op == 20 || op == 19) {
-            AtomicAckETHeader atomicAeth;
-            packet.extract_hdr(atomicAeth);
+            AtomicETHeader atomicEth;
+            packet.extract_hdr(atomicEth);
             ATOMIC_DATA new_event;
             new_event.qp_id = bth.dest_qp;
-            new_event.swap_add = atomicAeth.swap_add;
-            new_event.compare = atomicAeth.compare;
-            new_event.rkey = atomicAeth.rkey;
-            new_event.raddr = atomicAeth.raddr;
+            new_event.swap_add = atomicEth.swap_add;
+            new_event.compare = atomicEth.compare;
+            new_event.rkey = atomicEth.rkey;
+            new_event.raddr = atomicEth.raddr;
             new_event.ecn = iph.ecn;
             set_flow_id(new_event, flow_id);
             return new_event;
@@ -350,11 +357,6 @@ rx_parser rx_module {
             return new_event;
         }
 
-        // Note: if it doesn't match any opcode, what should we return?
-        // Instead, the function could return void and we simply push to the type's queue.
-        // Problem: this function would need to be inside of the scheduler to access the queues
-        // A: have a default event (NULL_EVENT)
-
         return NULL_EVENT;
     }
 
@@ -370,7 +372,7 @@ tx_sched tx_module {
     // tx_queue_t  new_queue(50);
     // tx_module.tx_queues[flow_id] = new_queue;
 
-    tx_queue_t transmit_queue(20)[2];
+    flow_map<tx_queue_t> tx_queues;
 
     int packet_counter = 0;
     int currently_sending = 0;
@@ -380,10 +382,10 @@ tx_sched tx_module {
 
     pkt_t next_packet() {
         int slice = 10;
-        pkt_t p = transmit_queue[currently_sending].pop();
+        pkt_t p = tx_queues[currently_sending].pop();
         packet_counter = packet_counter + 1;
 
-        if(packet_counter == slice || transmit_queue[currently_sending].len() == 0) {
+        if(packet_counter == slice || tx_queues[currently_sending].len() == 0) {
             currently_sending = (currently_sending + 1) % tx_queues.len();
             packet_counter = 0;
         }
@@ -483,54 +485,96 @@ sched ROCEv2Sched {
     // NACK / DCQCN TIMER EPs / CNP EPs / ACK / DATA / RDMA_EVENT
 
     // TODO: implement aging
+
+    // New note: can we initialize the values of a list out of a function with a loop?
+    list<int> priorityList;
+    for(int i = 0; i < 15; i = i + 1) {
+        priorityList.add(0);
+    }
     event_t next_event() {
-        if(!NACK_Queue.active()) {
+        int highestPriorityIndex = 0;
+        for(int i = 0; i < 15; i = i + 1) {
+            if(highestPriorityIndex > priorityList[i])
+                highestPriorityIndex = priorityList[i];
+        }
+
+        priorityList[0] = priorityList[0] + NACK_Queue.len();
+        priorityList[1] = priorityList[1] + ACK_Queue.len();
+        priorityList[2] = priorityList[2] + ALPHA_CHECK_Queue.len();
+        priorityList[3] = priorityList[3] + NACK_Queue.len();
+        priorityList[4] = priorityList[4] + DCQCN_INCREASE_Queue.len();
+        priorityList[5] = priorityList[5] + CNP_CHECK_Queue.len();
+        priorityList[6] = priorityList[6] + CNP_Queue.len();
+        priorityList[7] = priorityList[7] + ATOMIC_DATA_Queue.len();
+        priorityList[8] = priorityList[8] + READ_REQ_DATA_Queue.len();
+        priorityList[9] = priorityList[9] + READ_REQ_DATA_Queue.len();
+        priorityList[10] = priorityList[10] + WRITE_DATA_Queue.len();
+        priorityList[11] = priorityList[11] + RECV_DATA_Queue.len();
+        priorityList[12] = priorityList[12] + TRANSMIT_EVENT_Queue.len();
+        priorityList[13] = priorityList[13] + RECV_Queue.len();
+        priorityList[14] = priorityList[14] + SEND_Queue.len();
+
+        if(!NACK_Queue.active() && highestPriorityIndex == 0) {
+            priorityList[0] = 0;
             return NACK_Queue.pop();
 
-        } else if(!ACK_Queue.active()) {
+        } else if(!ACK_Queue.active() && highestPriorityIndex == 1) {
+            priorityList[1] = 0;
             return ACK_Queue.pop();
 
-        } else if(!ALPHA_CHECK_Queue.active()) {
+        } else if(!ALPHA_CHECK_Queue.active() && highestPriorityIndex == 2) {
+            priorityList[2] = 0;
             return ALPHA_CHECK_Queue.pop();
 
-        } else if(!DCQCN_TIMER_Queue.active()) {
+        } else if(!DCQCN_TIMER_Queue.active() && highestPriorityIndex == 3) {
+            priorityList[3] = 0;
             return DCQCN_TIMER_Queue.pop();
 
-        } else if(!DCQCN_INCREASE_Queue.active()) {
+        } else if(!DCQCN_INCREASE_Queue.active() && highestPriorityIndex == 4) {
+            priorityList[4] = 0;
             return DCQCN_INCREASE_Queue.pop();
 
-        } else if(!CNP_CHECK_Queue.active()) {
+        } else if(!CNP_CHECK_Queue.active() && highestPriorityIndex == 5) {
+            priorityList[5] = 0;
             return CNP_CHECK_Queue.pop();
 
-        } else if(!CNP_Queue.active()) {
+        } else if(!CNP_Queue.active() && highestPriorityIndex == 6) {
+            priorityList[6] = 0;
             return CNP_Queue.pop();
 
-        } else if(!ATOMIC_DATA_Queue.active()) {
+        } else if(!ATOMIC_DATA_Queue.active() && highestPriorityIndex == 7) {
+            priorityList[7] = 0;
             return ATOMIC_DATA_Queue_Queue.pop();
 
-        } else if(!READ_REQ_DATA_Queue.active()) {
+        } else if(!READ_REQ_DATA_Queue.active() && highestPriorityIndex == 8) {
+            priorityList[8] = 0;
             return READ_REQ_DATA_Queue.pop();
 
-        } else if(!READ_RESP_DATA_Queue.active()) {
+        } else if(!READ_RESP_DATA_Queue.active() && highestPriorityIndex == 9) {
+            priorityList[9] = 0;
             return READ_REQ_DATA_Queue.pop();
         
-        } else if(!WRITE_DATA_Queue.active()) {
+        } else if(!WRITE_DATA_Queue.active() && highestPriorityIndex == 10) {
+            priorityList[10] = 0;
             return WRITE_DATA_Queue.pop();
 
-        } else if(!RECV_DATA_Queue.active()) {
+        } else if(!RECV_DATA_Queue.active() && highestPriorityIndex == 11) {
+            priorityList[11] = 0;
             return RECV_DATA_Queue.pop();
         
-        } else if(!TRANSMIT_EVENT_Queue.active()) {
+        } else if(!TRANSMIT_EVENT_Queue.active() && highestPriorityIndex == 12) {
+            priorityList[12] = 0;
             return TRANSMIT_EVENT_Queue.pop();
         
-        } else if(!RECV_Queue.active()) {
+        } else if(!RECV_Queue.active() && highestPriorityIndex == 13) {
+            priorityList[13] = 0;
             return RECV_Queue.pop();
 
         } else {
+            priorityList[14] = 0;
             return SEND_Queue.pop();
         }
 
-        // New note: should this function also return NULL_EVENT if it doesn't match any event type?
         return NULL_EVENT;
     }
 }
@@ -591,11 +635,8 @@ void SendProcessor(RDMA_EVENT::SEND_WQE ev, myContext ctx, list<event_t> events,
 
             ctx.sent_packets.add(save_packet);
         }
-        TRANSMIT_EVENT new_event;
-        new_event.wr_id = ev.wr_id;
-        new_event.psn = first_psn;
-        new_event.ack_req = ev.ack_req;
-        events.add(new_event);
+
+        out.psn = first_psn;
     }
 }
 
@@ -666,11 +707,8 @@ void WriteProcessor(RDMA_EVENT::WRITE_WQE ev, myContext ctx, list<event_t> event
 
             ctx.LSN = ctx.LSN + 1;
         }
-        TRANSMIT_EVENT new_event;
-        new_event.wr_id = ev.wr_id;
-        new_event.psn = first_psn;
-        new_event.ack_req = ev.ack_req;
-        events.add(new_event);
+
+        out.psn = first_psn;
     }
 }
 
@@ -722,12 +760,8 @@ void ReadProcessor(RDMA_EVENT::READ_WQE ev, myContext ctx, list<event_t> events,
 
         ctx.LSN = ctx.LSN + 1;
     }
-    // make sure to not retransmit the same packet
-    TRANSMIT_EVENT new_event;
-    new_event.wr_id = ev.wr_id;
-    new_event.psn = first_psn;
-    new_event.ack_req = ev.ack_req;
-    events.add(new_event);
+
+    out.psn = first_psn;
 }
 
 void AtomicProcessor(RDMA_EVENT::READ_WQE ev, myContext ctx, list<event_t> events, interm_out out, tx_module tx) {
@@ -767,17 +801,19 @@ void AtomicProcessor(RDMA_EVENT::READ_WQE ev, myContext ctx, list<event_t> event
     save_packet.acked = false;
     ctx.sent_packets.add(save_packet);
 
-    TRANSMIT_EVENT new_event;
-    new_event.wr_id = ev.wr_id;
-    new_event.psn = ctx.nPSN - 1;
-    new_event.ack_req = true;
-    events.add(new_event);
+    out.psn = ctx.nPSN - 1;
 
     ctx.LSN = ctx.LSN + 1;
 }
 
 // TODO: transmitProcessor receives <T> events
-void TransmitProcessor(TRANSMIT_EVENT ev, myContext ctx, list<event_t> events, interm_out out, tx_module tx) {
+void TransmitProcessor<T>(T ev, myContext ctx, list<event_t> events, interm_out out, tx_module tx) {
+
+    // in case the event is a TRANSMIT_EVENT, we get the psn from the event and assign it to the intermediate interm_output
+    // so we can use out.psn instead of ev.psn throught this EP
+    if(out.psn == -1) {
+        out.psn = ev.psn;
+    }
 
     if(ctx.first_pkt_connection) {
         ALPHA_CHECK new_event;
@@ -807,7 +843,7 @@ void TransmitProcessor(TRANSMIT_EVENT ev, myContext ctx, list<event_t> events, i
         element_list.packet.extract_hdr(bth);
 
         // only sends packets with psn greater than the one in ev (the previous were already sent)
-        if(bth.psn >= ev.psn) {
+        if(bth.psn >= out.psn) {
 
             // if it is a SEND packet and LSN < SSN
             if(!(element_list.SSN <= ctx.LSN) && bth.opcode == 4 || bth.opcode == 0 || bth.opcode == 2 || bth.opcode == 1) {
@@ -836,20 +872,6 @@ void TransmitProcessor(TRANSMIT_EVENT ev, myContext ctx, list<event_t> events, i
                 events.add(new_event);
             }
 
-            // if it requests ack, we add and start another timer to the list ack_timeout
-            if(bth.ack_req) {
-                TRANSMIT_EVENT new_event;
-                new_event.wr_id = ev.wr_id;
-                new_event.psn = bth.psn;
-                new_event.ack_req = ev.ack_req;
-
-                ack_wait ack;
-                ack.ack_timer.set_duration(microsecond(ctx.transport_timer));
-                ack.ack_timer.start(new_event);
-                ack.psn = bth.psn;
-                ctx.ack_timeout.add(ack);
-            }
-
             // transmit queue cannot receive packets (full)
             if(!ctx.tx_feedback.able) {
                 last_packet = false;
@@ -864,9 +886,15 @@ void TransmitProcessor(TRANSMIT_EVENT ev, myContext ctx, list<event_t> events, i
     if(!last_packet) {
         TRANSMIT_EVENT new_event;
         new_event.wr_id = ev.wr_id;
-        new_event.psn = ev.psn + number_packets_sent;
+        new_event.psn = out.psn + number_packets_sent;
         new_event.ack_req = ev.ack_req;
         events.add(new_event);
+    }
+
+    // starts the timer for ack timeout if it requires ack and the timer is inactive
+    if(ev.ack_req && !ctx.timer_ack_timeout.isActive()) {
+        ctx.timer_ack_timeout.set_duration(microsecond(ctx.transport_timer));
+        ctx.timer_ack_timeout.start(ev);
     }
     
     tx.transmit_queue[get_flow_id(ev)].rate(ctx.Rc);
@@ -918,8 +946,16 @@ void RecvDataProcessor(RECV_DATA ev, myContext ctx, list<event_t> events, interm
                 ctx.RQ_list.remove();
             }
         }
-        if(ev.ack_req || !aeth.ack)     // sends packet if requires ack or is a nack
-            ctx.tx_feedback = tx.transmit_queue[get_flow_id(ev)].push(p);
+        if(ev.ack_req || !aeth.ack) {     // sends packet if requires ack or is a nack
+            responder_packet_info responder_info;
+            responder_info.packet = p;
+            responder_info.wr_id = ev.wr_id;
+            ctx.responder_packets.add(responder_info);
+
+            RESPONDER_EVENT new_event;
+            new_event.qp_id = ev.qp_id;
+            events.add(new_event);
+        }
 
     } else {                // there are no recv events posted
         AETHeader aeth;
@@ -933,7 +969,15 @@ void RecvDataProcessor(RECV_DATA ev, myContext ctx, list<event_t> events, interm
         udp.src_port = ctx.src_port;
         udp.dst_port = ctx.dst_port;
         p.add_hdr({udp, bth, aeth});
-        ctx.tx_feedback = tx.transmit_queue[get_flow_id(ev)].push(p);
+
+        responder_packet_info responder_info;
+        responder_info.packet = p;
+        responder_info.wr_id = ev.wr_id;
+        ctx.responder_packets.add(responder_info);
+
+        RESPONDER_EVENT new_event;
+        new_event.qp_id = ev.qp_id;
+        events.add(new_event);
     }
 }
 
@@ -965,8 +1009,16 @@ void WriteDataProcessor(WRITE_DATA ev, myContext ctx, list<event_t> events, inte
         addr_t addr = ctx.RQ_list[0].addr;
         mem_write(addr, ev.data, ev.psn - ctx.write_first_psn, ev.data.len());
     }
-    if(ev.ack_req || !aeth.ack)     // sends packet if requires ack or is a nack
-        ctx.tx_feedback = tx.transmit_queue[get_flow_id(ev)].push(p);
+    if(ev.ack_req || !aeth.ack) {     // sends packet if requires ack or is a nack
+        responder_packet_info responder_info;
+        responder_info.packet = p;
+        responder_info.wr_id = ev.wr_id;
+        ctx.responder_packets.add(responder_info);
+
+        RESPONDER_EVENT new_event;
+        new_event.qp_id = ev.qp_id;
+        events.add(new_event);
+    }
 }
 
 void ReadReqProcessor(READ_REQ_DATA ev, myContext ctx, list<event_t> events, interm_out out, tx_module tx) {
@@ -1015,17 +1067,17 @@ void ReadReqProcessor(READ_REQ_DATA ev, myContext ctx, list<event_t> events, int
             }
 
             // TODO: add the packet to another list in the context and then create an event to TRANSMIT_EVENT
-            ctx.tx_feedback = tx.transmit_queue[get_flow_id(ev)].push(p);
+            responder_packet_info responder_info;
+            responder_info.packet = p;
+            responder_info.wr_id = ev.wr_id;
+            ctx.responder_packets.add(responder_info);
+
             ctx.ePSN = ctx.ePSN + 1;
         }
-        // Note: maybe we'll probably need a different TRANSMIT_EVENT processor, just for the responder side
-        if(!last_packet) {
-            TRANSMIT_EVENT new_event;
-            new_event.wr_id = ev.wr_id;
-            new_event.psn = first_psn;
-            new_event.ack_req = true;
-            events.add(new_event);
-        }
+
+        RESPONDER_EVENT new_event;
+        new_event.qp_id = ev.qp_id;
+        events.add(new_event);
 
     } else if(ev.psn < ctx.ePSN) {  // duplicate
         aeth.ack = true;
@@ -1039,7 +1091,15 @@ void ReadReqProcessor(READ_REQ_DATA ev, myContext ctx, list<event_t> events, int
         udp.dst_port = ctx.dst_port;
         udp.length = 8 + bth.len() + aeth.len();
         p.add_hdr({udp, bth, aeth});
-        ctx.tx_feedback = tx.transmit_queue[get_flow_id(ev)].push(p);
+
+        responder_packet_info responder_info;
+        responder_info.packet = p;
+        responder_info.wr_id = ev.wr_id;
+        ctx.responder_packets.add(responder_info);
+
+        RESPONDER_EVENT new_event;
+        new_event.qp_id = ev.qp_id;
+        events.add(new_event);
     } else {                        // out-of-order: NACK
         aeth.ack = false;
         aeth.type_nack = true;
@@ -1051,7 +1111,15 @@ void ReadReqProcessor(READ_REQ_DATA ev, myContext ctx, list<event_t> events, int
         udp.dst_port = ctx.dst_port;
         udp.length = 8 + bth.len() + aeth.len();
         p.add_hdr({udp, bth, aeth});
-        ctx.tx_feedback = tx.transmit_queue[get_flow_id(ev)].push(p);
+
+        responder_packet_info responder_info;
+        responder_info.packet = p;
+        responder_info.wr_id = ev.wr_id;
+        ctx.responder_packets.add(responder_info);
+
+        RESPONDER_EVENT new_event;
+        new_event.qp_id = ev.qp_id;
+        events.add(new_event);
     }
 }
 
@@ -1061,21 +1129,11 @@ void ReadRespProcessor(READ_RESP_DATA ev, myContext ctx, list<event_t> events, i
         int inactive_timer_counter = 0;
         bool stop_counter = false;
 
-        for(element in ctx.ack_timeout) {
-            // stops the ack_timer of the event with the given psn
-            if(ev.psn == element.psn) {
-                element.ack_timer.stop();
-                break;
-            }
-            if(!element.ack_timer.isActive() && !stop_counter) {
-                inactive_timer_counter = inactive_timer_counter + 1;
-            } else if (element.ack_timer.isActive()) {
-                stop_counter = true;
-            }
+        // stops the timer for ack timeout if the expected packet arrived
+        if(ev.psn == ctx.sent_packets[0].psn) {
+            ctx.timer_ack_timeout.stop();
+            break;
         }
-        // remove the inactive elements until the first active or until the one with the expected psn
-        for(int i = 0; i < inactive_timer_counter; i = i + 1)
-            ctx.ack_timeout.remove();
 
         int pkt_counter = 0;
         int psn_ack_req = ev.psn;
@@ -1085,6 +1143,7 @@ void ReadRespProcessor(READ_RESP_DATA ev, myContext ctx, list<event_t> events, i
                 psn_ack_req = packet.psn;       // gets the psn of the oldest packet that requires ack
                 break;
             } else if(packet.psn > ev.psn)
+
                 break;
             pkt_counter = pkt_counter + 1;
         }
@@ -1102,6 +1161,14 @@ void ReadRespProcessor(READ_RESP_DATA ev, myContext ctx, list<event_t> events, i
 
         for(int i = 0; i <= pkt_counter; i = i + 1)
             ctx.sent_packets.remove();
+
+        // restarts the timer for ack timeout if there are packets expecting ack
+        for(packet in ctx.sent_packets) {
+            if(packet.ack_req) {
+                ctx.timer_ack_timeout.restart();
+                break;
+            }
+        }
     }
 }
 
@@ -1148,7 +1215,15 @@ void AtomicDataProcessor(ATOMIC_DATA ev, myContext ctx, list<event_t> events, in
 
         udp.length = 8 + bth.len() + aeth.len() + atomicAeth.len();
         p.add_hdr({udp, bth, aeth, atomicAeth});
-        ctx.tx_feedback = tx.transmit_queue[get_flow_id(ev)].push(p);
+
+        responder_packet_info responder_info;
+        responder_info.packet = p;
+        responder_info.wr_id = ev.wr_id;
+        ctx.responder_packets.add(responder_info);
+
+        RESPONDER_EVENT new_event;
+        new_event.qp_id = ev.qp_id;
+        events.add(new_event);
 
         ctx.ePSN = ctx.ePSN + 1;
 
@@ -1164,7 +1239,15 @@ void AtomicDataProcessor(ATOMIC_DATA ev, myContext ctx, list<event_t> events, in
         udp.dst_port = ctx.dst_port;
         udp.length = 8 + bth.len() + aeth.len();
         p.add_hdr({udp, bth, aeth});
-        ctx.tx_feedback = tx.transmit_queue[get_flow_id(ev)].push(p);
+
+        responder_packet_info responder_info;
+        responder_info.packet = p;
+        responder_info.wr_id = ev.wr_id;
+        ctx.responder_packets.add(responder_info);
+
+        RESPONDER_EVENT new_event;
+        new_event.qp_id = ev.qp_id;
+        events.add(new_event);
     } else {                        // out-of-order: NACK
         aeth.ack = false;
         aeth.type_nack = true;
@@ -1176,30 +1259,50 @@ void AtomicDataProcessor(ATOMIC_DATA ev, myContext ctx, list<event_t> events, in
         udp.dst_port = ctx.dst_port;
         udp.length = 8 + bth.len() + aeth.len();
         p.add_hdr({udp, bth, aeth});
-        ctx.tx_feedback = tx.transmit_queue[get_flow_id(ev)].push(p);
+
+        responder_packet_info responder_info;
+        responder_info.packet = p;
+        responder_info.wr_id = ev.wr_id;
+        ctx.responder_packets.add(responder_info);
+
+        RESPONDER_EVENT new_event;
+        new_event.qp_id = ev.qp_id;
+        events.add(new_event);
     }   
 }
 
+void ResponderProcessor(RESPONDER_EVENT ev, myContext ctx, list<event_t> events, interm_out out, tx_module tx) {
+    bool last_packet = true;
+    BTHeader bth;
+    UDPHeader udp;
+    int number_packets_sent = 0;
+
+    for(element_list in ctx.responder_packets) {
+        pkt_t p = element_list.packet;
+        ctx.tx_feedback = tx.transmit_queue[get_flow_id(ev)].push(p);
+
+        // transmit queue cannot receive packets (full)
+        if(!ctx.tx_feedback.able) {
+            RESPONDER_EVENT new_event;
+            new_event.qp_id = ev.qp_id;
+            events.add(new_event);
+            break;
+        }
+    }
+}
+
 // TODO: check what ack for atomic operations do
+// A: they do the same thing as regular ACKs, acknowledges packets and that's it
+// It also returns an AtomicAckETH with the original remote read data, but it does not use this value (implementation specific, probably)
 void AckProcessor(ACK ev, myContext ctx, list<event_t> events, interm_out out, tx_module tx) {
     int inactive_timer_counter = 0;
     bool stop_counter = false;
 
-    for(element in ctx.ack_timeout) {
-        // stops the ack_timer of the event with the given psn
-        if(ev.psn == element.psn) {
-            element.ack_timer.stop();
-            break;
-        }
-        if(!element.ack_timer.isActive() && !stop_counter) {
-            inactive_timer_counter = inactive_timer_counter + 1;
-        } else if (element.ack_timer.isActive()) {
-            stop_counter = true;
-        }
+    // stops the timer for ack timeout if the expected packet arrived
+    if(ev.psn == ctx.sent_packets[0].psn) {
+        ctx.timer_ack_timeout.stop();
+        break;
     }
-    // remove the inactive elements until the first active or until the one with the expected psn
-    for(int i = 0; i < inactive_timer_counter; i = i + 1)
-        ctx.ack_timeout.remove();
 
     int pkt_counter = 0;
     int psn_ack_req = ev.psn;
@@ -1224,27 +1327,24 @@ void AckProcessor(ACK ev, myContext ctx, list<event_t> events, interm_out out, t
     }
 
     ctx.LSN = ev.credit_count + ev.MSN;         // update LSN
+
+    for(packet in ctx.sent_packets) {
+        if(packet.ack_req) {
+            ctx.timer_ack_timeout.restart();
+            break;
+        }
+    }
 }
 
 void NackProcessor(NACK ev, myContext ctx, list<event_t> events, interm_out out, tx_module tx) {
     int inactive_timer_counter = 0;
     bool stop_counter = false;
 
-    for(element in ctx.ack_timeout) {
-        // stops the ack_timer of the event with the given psn
-        if(ev.psn == element.psn) {
-            element.ack_timer.stop();
-            break;
-        }
-        if(!element.ack_timer.isActive() && !stop_counter) {
-            inactive_timer_counter = inactive_timer_counter + 1;
-        } else if (element.ack_timer.isActive()) {
-            stop_counter = true;
-        }
+    // stops the timer for ack timeout if the expected packet arrived
+    if(ev.psn == ctx.sent_packets[0].psn) {
+        ctx.timer_ack_timeout.stop();
+        break;
     }
-    // remove the inactive elements until the first active or until the one with the expected psn
-    for(int i = 0; i < inactive_timer_counter; i = i + 1)
-        ctx.ack_timeout.remove();
 
     if(ev.type_nack) {
         int pkt_counter = 0;
@@ -1274,6 +1374,13 @@ void NackProcessor(NACK ev, myContext ctx, list<event_t> events, interm_out out,
         new_event.psn = ev.psn;
         new_event.ack_req = ev.true;
         events.add(new_event);
+    }
+
+    for(packet in ctx.send_packets) {
+        if(packet.ack_req) {
+            ctx.timer_ack_timeout.restart();
+            break;
+        }
     }
 }
 
@@ -1422,11 +1529,11 @@ void DcqcnIncreaseProcessor(DCQCN_INCREASE ev, myContext ctx, list<event_t> even
 }
 
 dispatch table {
-    RDMA_EVENT::SEND_WQE -> {SendProcessor};
-    RDMA_EVENT::WRITE_WQE -> {WriteProcessor};
+    RDMA_EVENT::SEND_WQE -> {SendProcessor, TransmitProcessor};
+    RDMA_EVENT::WRITE_WQE -> {WriteProcessor, TransmitProcessor};
     RDMA_EVENT::RECV_WQE -> {RecvProcessor};
-    RDMA_EVENT::READ_WQE -> {ReadProcessor};
-    RDMA_EVENT::ATOMIC_WQE -> {AtomicProcessor};
+    RDMA_EVENT::READ_WQE -> {ReadProcessor, TransmitProcessor};
+    RDMA_EVENT::ATOMIC_WQE -> {AtomicProcessor, TransmitProcessor};
     TRANSMIT_EVENT -> {TransmitProcessor};
     RECV_DATA -> {CnpCheckProcessor, RecvDataProcessor};
     WRITE_DATA -> {CnpCheckProcessor, WriteDataProcessor};
