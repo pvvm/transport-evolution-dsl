@@ -145,6 +145,7 @@ context MyContext
     int server_stream_counter=0;
     int client_stream_counter=0;
     int largest_acked_time=0;
+    int packet_size_limit;
 
     //loss detection
     int kPacketThresh=3;
@@ -190,29 +191,33 @@ void selectDataProcessor(SEND ev, MyContext ctx, list<event_t> events, list<pkt_
     int i =0;
     pkt_t new_pkt = new_pkt();
     QuicStream qs;
-    PacketInfo pkt_info;
-    int bytes_allowed = ctx.congestion_window;
-    while(sent_size<ctx.size_limit && i < ctx.streams.len() ){
-        qs=ctx.streams[i];
-        Frame frame;
-        pkt_info.stream_id.add(i);
-        frame.size = min(qs.frame_size_limit,bytes_allowed,qs.data.len()-qs.last_sent);
-        pkt_info.frame_size.add(frame.size);
-        pkt_info.start_point.add(qs.last_sent);
-        frame.data = qs.data[qs.last_sent:qs.last_sent + frame.size];
-        qs.last_sent = qs.last_sent + frame.size;
-        new_pkt.add_data(byte(frame));
-        ctx.bytes_in_flight += frame.data.len();
-        bytes_allowed-= frame.data.len();
-    }
+    int bytes_allowed = ctx.congestion_window-ctx.bytes_in_flight;
+    int bytes_in_packet = 
+    int frame_size_limit = bytes_allowed/ctx.streams.size() //TODO: think of max number of streams per packet.  because there may be too many streams
+    while(bytes_allowed>0){
+        PacketInfo pkt_info;
+        while(sent_size<ctx.size_limit && i < ctx.streams.len() && bytes_allowed>0 ){
+            qs=ctx.streams[i];
+            Frame frame;
+            pkt_info.stream_id.add(i);
+            frame.size = min(qs.frame_size_limit,bytes_allowed,frame_size_limit,qs.data.len()-qs.last_sent);
+            pkt_info.frame_size.add(frame.size);
+            pkt_info.start_point.add(qs.last_sent);
+            frame.data = qs.data[qs.last_sent:qs.last_sent + frame.size];
+            qs.last_sent = qs.last_sent + frame.size;
+            new_pkt.add_data(byte(frame));
+            ctx.bytes_in_flight += frame.data.len();
+            bytes_allowed-= frame.data.len();
+            i+=1;
+        }
     pkt_info.time_sent=now()
     QuicHeader qheader;
     qheader.pkt_id = ctx.id_counter++
     pkt_info.packet_id = qheader.pkt_id
     new_pkt.add_header(qheader)
     ctx.sent_packets.add(pkt_info)
-    out.packet=new_pkt;
-    out.info=pkt_info;
+    tx_module.add(new_pkt);// pick a queue to add a packet
+    }
 }
 
 interm_output iterm_out {
@@ -225,7 +230,7 @@ void sendProcessor<T>(T ev, myContext ctx, list<event_t> events, list<pkt_t> pac
     if (info.in_flight){
         if (info.ack_eliciting)
             ctx.time_of_last_ack_eliciting_packet = now()
-        tx_module.add(out.packet)//???
+        //???
         if(timer.is_running)
             timer.restart(TIMER)
         else{
@@ -268,10 +273,15 @@ void ackProcessor(ACK ev, MyContext ctx, list<event_t> events, list<pkt_t> packe
     //SetLossDetectionTimer()
     if(ack.ECN_CE_Count>ctx.ecn_ce_counters){
         ctx.ecn_ce_counters = ack.ECN_CE_Count;
-        CONGESTION ev;
-        ev.start_time = ctx.largest_acked_packet;
-        events.add(ev);
+        out.in_congestion = true;
+        out.start_time = ctx.largest_acked_packet;
     }
+    // if(ack.ECN_CE_Count>ctx.ecn_ce_counters){
+    //     ctx.ecn_ce_counters = ack.ECN_CE_Count;
+    //     CONGESTION ev;
+    //     ev.start_time = ctx.largest_acked_packet;
+    //     events.add(ev);
+    // }
 }
 
 void updateRttProcessor(ACK ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
@@ -283,7 +293,7 @@ void updateRttProcessor(ACK ev, myContext ctx, list<event_t> events, list<pkt_t>
         ctx.min_rtt = ctx.latest_rtt;
         ctx.smoothed_rtt = ctx.latest_rtt;
         ctx.rttvar = ctx.latest_rtt / 2;
-        ctx.first_rtt_sample = now();
+        ctx.first_rtt_sample = now();//     
         return;
     }
 
@@ -311,12 +321,17 @@ void adjustWindowProcessor<T>(T ev, myContext ctx, list<event_t> events, list<pk
         else
             ctx.congestion_window += ctx.max_datagram_size*packet.sent_bytes/ctx.congestion_window
     }
+    if(ctx.congestion_window-ctx.bytes_in_flight>ctx.send_thresh){
+        SEND ev;
+        ev.fow_id = ctx.flow_id;
+        events.add(ev);
+    }
         
 }
 
 void congestionProcessor(CONGESTION ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
 
-    if (packet.time_sent <= ctx.congestion_recovery_start_time)
+    if (out.time_sent <= ctx.congestion_recovery_start_time||!out.in_congestion)
         return;
 
     ctx.congestion_recovery_start_time = now();
@@ -337,17 +352,15 @@ void lossDetectionProcessor<T>(T ev, myContext ctx, list<event_t> events, list<p
         if(ctx.sent_packets[i].time_sent > loss_threshold || ctx.largest_acked_packet >= ctx.sent_packets[i].packet_number + ctx.kPacketThreshold){
             lost_packets.add(ctx.sent_packets[i]);
             last_loss = max(ctx.sent_packets[i].sent_time,last_loss);
-            sent_packets.remove(i);//is this a good idea??
+            ctx.sent_packets.remove(ctx.sent_packets[i]);
         }
     }
 
     out.lost_packets=lost_packets;
     if (lost_packets.len()>0){
-        CONGESTION ev;
-        ev.start_time = last_loss;
-        events.add(ev);
+        out.in_congestion = true;
+        out.start_time = last_loss;
     }
-
 
 }
 
@@ -385,16 +398,24 @@ void addStreamProcessor(ADD_DATA ev, myContext ctx, list<event_t> events, list<p
         qs.id=(ctx.client_stream_counter+=2)
     }
     qs.data=ev.data;
+    SEND ev;
+    ev.fow_id = ctx.flow_id;
+    events.add(ev);
 }
 
+//after recieving the packet we must add the data to a buffer for each stream and then if we have enough in order packets 
 
+void receiveProcessor(/*Event Type*/ ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
+
+    /*process*/
+
+}
 
 /*Dispatch Table*/
 
 dispatch table{
     SEND -> {selectDataProcessor, sendProcessor}
-    ACK -> {ackProcessor, updateRttProcessor, adjustWindowProcessor, lossDetectionProcessor, retransmitProcessor}
-    TIMER -> {lossDetectionProcessor,retransmitProcessor}
+    ACK -> {ackProcessor ,congestionProcessor,updateRttProcessor,lossDetectionProcessor, congestionProcessor,  adjustWindowProcessor, retransmitProcessor}
+    TIMER -> {lossDetectionProcessor,congestionProcessor,retransmitProcessor}
     ADD_DATA -> {addStreamProcessor}
-    CONGESTION -> {congestionProcessor}
 }
