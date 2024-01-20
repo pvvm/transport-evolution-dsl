@@ -1,0 +1,650 @@
+event RDMA_EVENT {
+    int wr_id;
+    int lkey;
+    addr_t addr;
+    int length;
+}
+
+event SEND_WQE : RDMA_EVENT {
+    int ack_req;
+}
+
+event WRITE_WQE : RDMA_EVENT {
+    int ack_req;
+    int rkey;
+    addr_t raddr; 
+}
+
+event READ_WQE : RDMA_EVENT {
+    int rkey;
+    addr_t raddr; 
+}
+
+event ATOMIC_WQE : RDMA_EVENT {
+    int compare_add;
+    int swap;
+    bool is_swap;
+    int rkey;
+    addr_t raddr;
+}
+
+event RECV_WQE : RDMA_EVENT {
+
+}
+
+event RATE_TIMER {
+    int qp_id;
+    int wr_id;
+    int offset;
+}
+
+event ACK {
+    int qp_id;
+    int wr_id;
+    // everything prior and including this number is received
+    int ack_no; 
+}
+
+event NACK {
+    int qp_id;
+    int wr_id;
+    // something arrived out of order at the reciever. This is the segment that was expected
+    int nack_no;
+}
+
+event CNP {
+    int qp_id;
+}
+
+event DATA {
+    int qp_id;
+    int wr_id;
+    int offset;
+    stream data;
+    bool ecn;
+}
+
+sched ROCEv2Sched {
+
+    // Note: I think that TIMER_Queue should actually have only one element at most,
+    // since we process one wr each time and, due to go-back-N, we need to drop
+    // the event in the queue and replace it for the one starting at N
+    // R: must have one element
+    int repeat_drop(queue_t TIMER_Queue) {
+        return 0;   // always drops the first packet of the queue
+    }
+
+    queue_t<RDMA_EVENT> SEND_Queue();
+    queue_t<RDMA_EVENT> RECV_Queue();
+    queue_t<RATE_TIMER> TIMER_Queue(0, 1, repeat_drop);
+    queue_t<ACK> ACK_Queue();
+    queue_t<NACK> NACK_Queue();
+    queue_t<CNP> CNP_Queue();
+    queue_t<DATA> DATA_Queue();
+    
+
+    bool enqueue(event_t new_event) {
+        if(type(new_event) == RDMA_EVENT::SEND_WQE ||
+        type(new_event) == RDMA_EVENT::WRITE_WQE ||
+        type(new_event) == RDMA_EVENT::READ_WQE) {
+            SEND_Queue.push(new_event);
+            return 1;
+        } else if(type(new_event) == RDMA_EVENT::RECV_WQE) {
+            RECV_Queue.push(new_event);
+            return 1;
+        } else if (type(new_event) == RATE_TIMER) {
+            TIMER_Queue.push(new_event);
+            return 1;
+        } else if (type(new_event) == ACK) {
+            ACK_Queue.push(new_event);
+            return 1;
+        } else if (type(new_event) == NACK) {
+            NACK_Queue.push(new_event);
+            return 1;
+        } else if (type(new_event) == CNP) {
+            CNP_Queue.push(new_event);
+            return 1;
+        } else if (type(new_event) == DATA) {
+            DATA_Queue.push(new_event);
+            return 1;
+        }
+        return 0;
+    }
+
+    // Note: priority
+    // R: NACK / CNP (TIMER vs ACK) DATA / RDMA_EVENT
+    // NACK / ACK TIMER DATA / RDMA_EVENT
+    // Check round robin (deficit and weighted) vs. Aging
+    event_t next_event(queue_t SEND_Queue, queue_t RECV_Queue, queue_t TIMER_Queue
+    queue_t ACK_Queue, queue_t NACK_Queue, queue_t CNP_Queue, queue_t DATA_Queue) {
+
+    }
+}
+SEND_EVENT::SEND_WQE
+EP(s) --> get data from memory, send some packets out (how many?)
+ACK --> update the context, any congestion control-related processing (?), completion event
+NACK --> go-back-N
+
+// Note: instead of proc_out_t, we are sending both lists as parameters and
+// adding a new struct-like type for intermediate values between eps
+struct proc_out_t {
+    list<event_t> event_list;
+    list<pkt_t> packet_list;
+}
+
+interm_output iterm_out {
+
+}
+
+struct work_comp {
+    int wr_id;
+    int status;
+    int opcode;
+    int qp_id;
+    int length;
+}
+
+header UDPHeader {
+    int src_port;
+    int dst_port;
+    int length;
+    int checksum;
+}
+
+header BTHeader {
+    int opcode;
+    bool ack_req;
+    int dest_qp;
+    int ack_psn;
+}
+
+header RETHeader {
+    int raddr;
+    int rkey;
+    int length;
+}
+
+header AETHeader {
+    bool syndrome;
+    int seq_num;
+}
+
+context myContext {
+    int qp_id;
+    int lkey;
+    
+    // Note: removed to include a list of events
+    /*int wr_id;
+    addr_t addr;
+    int rkey;
+    addr_t raddr;
+    int length;
+    int opcode;*/
+
+    list<RDMA_EVENT> events_list;
+
+    int MTU;
+    stream buffer;
+    int init_sqn;
+    int dest_qp;
+    int src_port;
+    int dst_port;
+    int offset_np;      // offset of the next packet wanted by recv
+
+    
+    // Note: DCQCN removed for now
+    /*float ecn_timer;
+    float targ_rate;
+    float curr_rate;
+    float alpha;
+    float g;
+    int rate_limiting_granularity; //interval between sends (100ns, 1ms, 1 sec...)
+    // also keep track when was the last time it sent something
+    */
+}
+
+// Note: could RDMA_EVENT represent any kind of event?
+// Even so, we would have trouble accessing ev.rkey and ev.raddr
+// R: yes, but leave rkey and raddr in their own ep
+
+// Note: are we going to require that all ep follow the same pattern of parameters?
+// event, context, list of events, list of packets, and the intermediate output
+/*void UpdateContextProcessor(RDMA_EVENT ev, myContext ctx, list<event_t> events, list<pkt_t> packets /*, interm_out out*/) {
+    ctx.wr_id = ev.wr_id;
+    ctx.lkey = ev.lkey;
+    ctx.addr = ev.addr;
+    ctx.length = ev.length;
+}*/
+
+// Note: in this way, this processor can be shared between send and write
+void SendProcessor(RDMA_EVENT::SEND_WQE ev, myContext ctx, list<event_t> events, list<pkt_t> packets /*, interm_out out*/) {
+    ctx.opcode = 0;
+
+    proc_out_t output;
+    bool last_packet = false;
+
+    if(ev.lkey == ctx.lkey) {
+        ctx.buffer.mem_append(ev.addr, ev.length);
+
+        // Note: change index < ctx.length to, instead, iterate according to the desired rate
+        for(int index = 0; index < ctx.length; index = index + ctx.MTU) {
+            pkt_t p = new_pkt();
+
+            int data_len = ctx.MTU;
+            if(index + ctx.MTU < ctx.length)
+                p.add_data(ctx.buffer[index : index + ctx.MTU]);
+            else { // if the last packet doesn't match MTU
+                p.add_data(ctx.buffer[index : ctx.length]);
+                data_len = ctx.length - index;
+            }
+
+            if(index == 0 && ctx.opcode == 1 || ctx.opcode == 2) {
+                eth.addr = ctx.raddr;
+                eth.rkey = ctx.rkey;
+                eth.length = ctx.length;
+                pkt.add_hdr(eth);
+            }
+            BTHeader bth;
+            // Note: still need to deal with the set of BTH opcodes, which vary among send and write
+            if(ctx.length <= ctx.MTU)
+                bth.opcode = 4;     // only 1 packet
+            else if(index == 0)
+                bth.opcode = 0;     // first packet
+            else if(index + ctx.MTU >= ctx.length) {
+                bth.opcode = 2;     // last packet
+                last_packet = true;
+            } else
+                bth.opcode = 1;     // middle packet
+            bth.ack_req = 
+            bth.dest_qp = ctx.dest_qp;
+            bth.ack_psn = ctx.init_sqn + index;
+
+            UDPHeader udp;
+            udp.src_port = ctx.src_port;
+            udp.dst_port = ctx.dst_port;
+            udp.length = 8 + bth.len() + data_len;
+            // Note: built-in checksum operation
+            // R: checksum(name_of_the_algorithm)
+
+            // Note: Bunch of add_hdr or a single add_hdr with a list of headers?
+            // R: pkt.add_hdr({udp, bth, eth});
+            pkt.add_dr({udp, bth});
+
+            output.packet_list.add(p);
+        }
+    }
+
+    if(!last_packet) {
+        RATE_TIMER new_event;
+        new_event.qp_id = ctx.qp_id;
+        new_event.wr_id = ctx.wr_id;
+        new_event.offset = index;
+        output.event_list.add(new_event);
+    }
+
+    // Note: sleep
+    // R: no sleep
+}
+
+void AddHeadersProcessor(RDMA_EVENT ev, myContext ctx, list<event_t> events, list<pkt_t> packets /*, interm_out out*/) {
+
+}
+
+// Note: only a few small changes from send. ctx, bth opcode, reth, and udp length
+// R: create packages in one ep and add the header later, in another ep
+proc_out_t WriteProcessor(RDMA_EVENT::WRITE_WQE ev, myContext ctx) {
+    ctx.wr_id = ev.wr_id;
+    ctx.lkey = ev.lkey;
+    ctx.addr = ev.addr;
+    ctx.length = ev.length;
+    ctx.rkey = ev.rkey;
+    ctx.raddr = ev.raddr;
+    ctx.opcode = 1;
+
+    proc_out_t output;
+    bool last_packet = false;
+    int index;
+
+    ctx.buffer.mem_append(ev.addr, ev.length);
+
+    if(ev.lkey == ctx.lkey) {
+        RETHeader eth;
+        // Note: change index < ctx.length to, instead iterate according to the desired rate
+        for(index = 0; index < ctx.length; index = index + ctx.MTU) {
+            pkt_t p = new_pkt();
+
+            int data_len = ctx.MTU;
+            if(index + ctx.MTU < ctx.length)
+                p.add_data(ctx.buffer[index : index + ctx.MTU]);
+            else { // if the last packet doesn't match MTU
+                p.add_data(ctx.buffer[index : ctx.length]);
+                data_len = ctx.length - index;
+            }
+
+            if(index == 0) {
+                eth.addr = ctx.raddr;
+                eth.rkey = ctx.rkey;
+                eth.length = ctx.length;
+                p.add_hdr(eth);
+            }
+
+            BTHeader bth;
+            if(ctx.length <= ctx.MTU)
+                bth.opcode = 10;     // only 1 packet
+            else if(index == 0)
+                bth.opcode = 6;     // first packet
+            else if(index + ctx.MTU >= ctx.length) {
+                bth.opcode = 8;     // last packet
+                last_packet = true;
+            } else
+                bth.opcode = 7;     // middle packet
+            bth.dest_qp = ctx.dest_qp;
+            bth.ack_psn = ctx.init_sqn + index;
+
+            UDPHeader udp;
+            udp.src_port = ctx.src_port;
+            udp.dst_port = ctx.dst_port;
+            udp.length = 8 + bth.len() + data_len;
+            if(index == 0)
+                udp.length = udp.length + eth.len();
+            // Note: built-in checksum operation
+
+            // Note: Bunch of add_hdr or a single add_hdr with a list of headers?
+            p.add_hdr(bth);
+            p.add_hdr(udp);
+
+            output.packet_list.add(p);
+        }
+    }
+
+    if(!last_packet) {
+        RATE_TIMER new_event;
+        new_event.qp_id = ctx.qp_id;
+        new_event.wr_id = ctx.wr_id;
+        new_event.offset = index;
+        output.event_list.add(new_event);
+    }
+
+    // Note: sleep
+
+    return output;
+}
+
+// Note: what should we return? Nothing? We don't have a void
+// R: every ep will return nothing (void)
+void RecvProcessor(RDMA_EVENT::RECV_WQE ev, myContext ctx) {
+    ctx.wr_id = ev.wr_id;
+    ctx.lkey = ev.lkey;
+    ctx.addr = ev.addr;
+    ctx.length = ev.length;
+    ctx.opcode = 6;
+    ctx.offset_np = 0;
+}
+
+proc_out_t ReadProcessor(RDMA_EVENT::READ_WQE ev, myContext ctx) {
+    ctx.wr_id = ev.wr_id;
+    ctx.lkey = ev.lkey;
+    ctx.addr = ev.addr;
+    ctx.length = ev.length;
+    ctx.rkey = ev.rkey;
+    ctx.raddr = ev.radd;
+    ctx.opcode = 2;
+
+    proc_out_t output;
+
+    pkt_t p = new_pkt();
+
+    eth.addr = ctx.raddr;
+    eth.rkey = ctx.rkey;
+    eth.length = ctx.length;
+    p.add_hdr(eth);
+
+    BTHeader bth;
+    bth.opcode = 12;
+    bth.dest_qp = ctx.dest_qp;
+    // Note: is ack_psn necessary in this case?
+    // R: yes
+    bth.ack_psn = ctx.init_sqn;
+
+    UDPHeader udp;
+    udp.src_port = ctx.src_port;
+    udp.dst_port = ctx.dst_port;
+    udp.length = 8 + bth.len() + eth.len();
+    // Note: built-in checksum operation
+
+    // Note: Bunch of add_hdr or a single add_hdr with a list of headers?
+    p.add_hdr(bth);
+    p.add_hdr(udp);
+
+    output.packet_list.add(p);
+    return output;
+}
+
+// Note: maybe the wr headers could be in the context, so we could just change some of their values,
+// instead of creating and setting all values
+// R: we could do that
+
+// Note: just a few changes from send/write, initial index, less options of opcode
+// Maybe we could explore the modularity by creating a module to update the context
+// and another to create packets, which could be used by SEND, WRITE and TIMER
+proc_out_t TimerProcessor(RATE_TIMER ev, myContext ctx) {
+    proc_out_t output;
+
+    for(index = ev.offset; index < ctx.length; index = index + ctx.MTU) {
+        pkt_t p = new_pkt();
+
+        int data_len = ctx.MTU;
+        if(index + ctx.MTU < ctx.length)
+            p.add_data(ctx.buffer[index : index + ctx.MTU]);
+        else { // if the last packet doesn't match MTU
+            p.add_data(ctx.buffer[index : ctx.length]);
+            data_len = ctx.length - index;
+        }
+
+        BTHeader bth;
+        if(ctx.opcode == 0) {       // send
+            if(index + ctx.MTU >= ctx.length) {
+                bth.opcode = 2;     // last packet
+                last_packet = true;
+            } else
+                bth.opcode = 1;     // middle packet
+        } else {                    // write
+            if(index + ctx.MTU >= ctx.length) {
+                bth.opcode = 8;     // last packet
+                last_packet = true;
+            } else
+                bth.opcode = 7;     // middle packet
+        }
+        bth.dest_qp = ctx.dest_qp;
+        bth.ack_psn = ctx.init_sqn + index;
+
+        UDPHeader udp;
+        udp.src_port = ctx.src_port;
+        udp.dst_port = ctx.dst_port;
+        udp.length = 8 + bth.len() + data_len;
+        // Note: built-in checksum operation
+
+        // Note: Bunch of add_hdr or a single add_hdr with a list of headers?
+        p.add_hdr(bth);
+        p.add_hdr(udp);
+
+        output.packet_list.add(p);
+    }
+
+    if(!last_packet) {
+        RATE_TIMER new_event;
+        new_event.qp_id = ctx.qp_id;
+        new_event.wr_id = ctx.wr_id;
+        new_event.offset = index;
+        output.event_list.add(new_event);
+    }
+}
+
+// Note: this ep should output nothing if the data comes from a read event
+// R: actually, it might produce an read event from the beginning, if there
+// is an out-of-order packet. Before sending a new packet, it waits a little
+// bit, based on the number of bytes left and throughput
+// 2 * (X bytes left / throughput r)
+proc_out_t DataProcessor(DATA ev, myContext ctx) {
+    proc_out_t output;
+
+    if(ev.qp_id == ctx.qp_id && ev.wr_id == ctx.wr_id) {
+        if(ctx.opcode == 6) {           // recv
+            pkt_t p = new_pkt();
+            AETHeader aeth;
+            if(offset == ctx.offset_np)     // in order: ACK
+                aeth.syndrome = true;
+            else                            // out-of-order: NACK
+                aeth.syndrome = false;
+            // Note: are aeth.seq_num and bth.ack_psn different?
+            // R: yes
+            aeth.seq_num = ctx.offset_np + init_sqn;
+            BTHeader bth;
+            bth.opcode = 17;
+            bth.dest_qp = ctx.dest_qp;
+            bth.ack_psn = ctx.offset_np + init_sqn;
+            UDPHeader udp;
+            udp.src_port = ctx.src_port;
+            udp.dst_port = ctx.dst_port;
+            udp.length = 8 + bth.len() + aeth.len();
+            // Note: built-in checksum operation
+            p.add_hdr(aeth);
+            p.add_hdr(bth);
+            p.add_hdr(udp);
+
+            output.packet_list.add(p);
+            if(offset != ctx.offset_np)     // NACK
+                return output;
+            
+            ctx.offset_np = ctx.offset_np + ev.data.len();
+
+        } else if(ctx.opcode == 2) {    // TODO: read
+
+        }
+
+        // Note: write to memory
+        // Maybe being a function and returning an integer might be interesting to present how successful was the operation
+        // Con: will lack a pattern with rest of grammar and mem_append
+        // Parameters: addr, stream of data, offset, length
+        // Length can be guessed from the data's length
+        // Maybe have different instructions to write memory
+        // "No questions asked", simply write the data without checking the data and keeps the stream as is
+        // Finer-grained control. Specify a value or list of values that should be discarded and not written if found in the data,
+        // and may or may not clear the stream
+        
+        mem_write(ctx.addr, ev.data, offset, ev.data.len());
+    }
+    
+
+    return output;
+}
+
+// Note: when ep are chained, does it have the output of the other ep as a parameter?
+// R: yes, we made a bunch of changes to the ep declaration and added the intermediate value.
+proc_out_t ECNProcessor(DATA ev, myContext ctx) {
+    proc_out_t output;
+    // Note: can we consider that the event has an ECN field? (bool)
+    // R: yes
+    if(ev.ecn) {
+        pkt_t pkt = new_pkt();
+        BTHeader bth;
+        bth.opcode = 129;
+        bth.dest_qp = ev.qp_id;
+        // Note: should we have the ack/psn in this case?
+        // R: we could put any value
+        bth.ack_psn = ctx.init_sqn + ev.offset;
+        UDPHeader udp;
+        udp.src_port = ctx.src_port;
+        udp.dst_port = ctx.dst_port;
+        udp.length = 8 + bth.len();
+        p.add_hdr(bth);
+        p.add_hdr(udp);
+        // Note: how to create an event that is triggered every 50micro s
+        // to send a CNP packet, if there was a ECN-marked packet during this interval?
+        // Maybe create keep creating an event while 50 micro s aren't reached. If it
+        // is reached, we can send a CNP packet or stop creating this event
+        // R: in this case, since it won't be that common, we could use a busy loop, i.e.
+        // create events that check if 50micro s passed, and sending the message if so
+
+        output.packet_list.add(p);
+    }
+    return output;
+}
+
+int CNPProcessor(CNP ev, myContext ctx) {
+    ctx.targ_rate = ctx.curr_rate;
+    ctx.curr_rate = ctx.curr_rate * (1 - ctx.alpha / 2);
+    // Note: what is g?
+    // R: in this case, we'll use a value set in the context
+    ctx.alpha = (1 - ctx.g) * ctx.alpha + ctx.g;
+
+    // Note: to check if alpha should be increased, maybe we should do something
+    // like the note in ECNProcessor
+    // R: busy loops could also be ok here
+
+    // Note: what are T and BC? Seconds? And wouldn't 5 bytes be a little too drastic? (DCQCN paper figure 7)
+    // R: they use some values in the 
+}
+
+// Note: What should this ep return? it needs to result in a CQE, but where should we store it?
+// R: Represent it as a stream
+work_comp CheckEndDataProcessor(DATA ev, myContext ctx) {
+    work_comp output;
+
+    // Note: if we assume that Read accepts out-of-order packets, we must use another technique.
+    // Perhaps keeping a list of bool/int that represents if packets arrived or not
+    // R: read won't accept out-of-order packets
+    if(ev.qp_id == ctx.qp_id && ev.wr_id == ctx.wr_id
+    && ev.offset + ev.data.len() == ctx.length) {
+        output.qp_id = ctx.qp_id;
+        output.wr_id = ctx.wr_id;
+        output.status = 0;
+        output.opcode = ctx.opcode;
+        output.length = ctx.lenght;
+    }
+
+    return output;
+}
+
+// Note: What should this ep return? it needs to result in a CQE, but where should we store it?
+work_comp CheckEndAckProcessor(ACK ev, myContext ctx) {
+    work_comp output;
+
+    if(ev.qp_id == ctx.qp_id && ev.wr_id == ctx.wr_id
+    && ev.ack_no - ctx.init_sqn == ctx.length) {
+        output.qp_id = ctx.qp_id;
+        output.wr_id = ctx.wr_id;
+        output.status = 0;
+        output.opcode = ctx.opcode;
+        output.length = ctx.lenght;
+    }
+
+    return output;
+}
+
+proc_out_t GoBackNProcessor(NACK ev, myContext ctx) {
+    proc_out_t output;
+
+    if(ev.qp_id == ctx.qp_id && ev.wr_id == ctx.wr_id) {
+        RATE_TIMER new_event;
+        new_event.qp_id = ev.qp_id;
+        new_event.wr_id = ev.wr_id;
+        new_event.offset = ev.nack_no - ctx.init_sqn;
+        output.event_list.add(new_event);
+    }
+
+    return output;
+}
+
+// TODO: responder side of read?
+ 
+dispatch table {
+    RDMA_EVENT::SEND_WQE -> {UpdateContextProcessor, SendProcessor};
+    RDMA_EVENT::WRITE_WQE -> {WriteProcessor};
+    RDMA_EVENT::RECV_WQE -> {RecvProcessor};
+    RDMA_EVENT::READ_WQE -> {ReadProcessor};
+    RATE_TIMER -> {TimerProcessor};
+    DATA -> {DataProcessor, ECNProcessor, CheckEndDataProcessor};
+    ACK -> {CheckEndAckProcessor};
+    NACK -> {GoBackNProcessor};
+}
