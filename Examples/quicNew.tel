@@ -1,9 +1,10 @@
 
 /*TX Module*/
 
-// tx_module {
-//     tx_queue_t<pkt_t> transmit_queue();
-// }
+tx_module {
+    tx_queue_t transmit_queue(10);
+    //TODO: add a simple next
+}
 
 
 /*Events*/
@@ -98,6 +99,7 @@ struct QuicStreamBuffer
     stream data;
     int offset = 0;
     list<bool> received;
+    addr_t address;
 
 };
 
@@ -157,7 +159,7 @@ context MyContext
     int kPacketThresh=3;
     int kTimeThreshold;
     int time_of_last_ack_eliciting_packet=0;
-    int largest_acked_packet = -1;//Question: is inf ok?
+    int largest_acked_packet = -1;
     int kGranularity;
     //vars
     int pto_count = 0;
@@ -190,7 +192,8 @@ context MyContext
 
     list<QuicStreamBuffer> qsbs;
 
-    int move_to_memory_size_thresh = 100;\\??
+    int move_to_memory_size_thresh = 100;
+    int max_stream_per_pkt  = 6;
 
 }
 
@@ -210,7 +213,7 @@ void selectDataProcessor(SEND ev, MyContext ctx, list<event_t> events, list<pkt_
     QuicStream qs;
     int bytes_allowed = ctx.congestion_window-ctx.bytes_in_flight;
     int bytes_in_packet = 
-    int frame_size_limit = bytes_allowed/ctx.streams.size() //TODO: think of max number of streams per packet.  because there may be too many streams
+    int frame_size_limit = max(bytes_allowed/ctx.streams.size(),bytes_allowed/ctx.max_stream_per_pkt) 
     while(bytes_allowed>0){
         PacketInfo pkt_info;
         while(sent_size<ctx.size_limit && i < ctx.streams.len() && bytes_allowed>0 ){
@@ -223,7 +226,8 @@ void selectDataProcessor(SEND ev, MyContext ctx, list<event_t> events, list<pkt_
             frame.offset = qs.last_sent;
             frame.data = qs.data[qs.last_sent:qs.last_sent + frame.size];
             qs.last_sent = qs.last_sent + frame.size;
-            new_pkt.add_data(byte(frame));
+            //new_pkt.add_data(byte(frame));
+            out.frames.add(frame);
             ctx.bytes_in_flight += frame.data.len();
             bytes_allowed-= frame.data.len();
             i+=1;
@@ -234,7 +238,6 @@ void selectDataProcessor(SEND ev, MyContext ctx, list<event_t> events, list<pkt_
     pkt_info.packet_id = qheader.pkt_id
     new_pkt.add_header(qheader)
     ctx.sent_packets.add(pkt_info)
-    tx_module.add(new_pkt);// pick a queue to add a packet
     }
 }
 
@@ -248,7 +251,6 @@ void sendProcessor<T>(T ev, myContext ctx, list<event_t> events, list<pkt_t> pac
     if (info.in_flight){
         if (info.ack_eliciting)
             ctx.time_of_last_ack_eliciting_packet = now()
-        //???
         if(timer.is_running)
             timer.restart(TIMER)
         else{
@@ -288,18 +290,11 @@ void ackProcessor(ACK ev, MyContext ctx, list<event_t> events, list<pkt_t> packe
     ctx.latest_rtt = now() - ctx.largest_acked_time
     ctx.update_rtt = true;
 
-    //SetLossDetectionTimer()
     if(ack.ECN_CE_Count>ctx.ecn_ce_counters){
         ctx.ecn_ce_counters = ack.ECN_CE_Count;
         out.in_congestion = true;
         out.start_time = ctx.largest_acked_packet;
     }
-    // if(ack.ECN_CE_Count>ctx.ecn_ce_counters){
-    //     ctx.ecn_ce_counters = ack.ECN_CE_Count;
-    //     CONGESTION ev;
-    //     ev.start_time = ctx.largest_acked_packet;
-    //     events.add(ev);
-    // }
 }
 
 void updateRttProcessor(ACK ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
@@ -316,10 +311,7 @@ void updateRttProcessor(ACK ev, myContext ctx, list<event_t> events, list<pkt_t>
     }
 
     ctx.min_rtt = min(ctx.min_rtt, ctx.latest_rtt)
-  // Limit ack_delay by max_ack_delay after handshake confirmation.
-    ctx.ack_delay = min(ctx.ack_delay, ctx.max_ack_delay)//????????
-
-  // Adjust for acknowledgment delay if plausible.
+    ctx.ack_delay = min(ctx.ack_delay, ctx.max_ack_delay)
     ctx.adjusted_rtt = ctx.latest_rtt
     if (ctx.latest_rtt >= ctx.min_rtt + ctx.ack_delay):
         ctx.adjusted_rtt = ctx.latest_rtt - ctx.ack_delay
@@ -384,7 +376,7 @@ void lossDetectionProcessor<T>(T ev, myContext ctx, list<event_t> events, list<p
 
 void retransmitProcessor<T>(T ev, MyContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
     if(out.lost_packets.len()==0){
-        return;//is it allowed?
+        return;
     }
     for(int j=0; j<out.lost_packets.len()j++){
         PacketInfo lost_packet=out.lost_packets[j]
@@ -421,16 +413,6 @@ void addStreamProcessor(ADD_DATA ev, myContext ctx, list<event_t> events, list<p
     events.add(ev);
 }
 
-//after recieving the packet we must add the data to a buffer for each stream and then if we have enough in order packets we will write them to the memory.
-
-
-
-
-
-
-
-
-
 ///////// RECEIVER
 
 
@@ -446,7 +428,7 @@ void storeDataProcessor(DATA_ARRIVAL ev, myContext ctx, list<event_t> events, li
                 break;
             }
         }
-        if(curr_id==-1){//creat new stream
+        if(curr_id==-1){//.creat new stream
             QuicStreamBuffer qsb;
             qsb.id = frame.stream_id;
             curr_id = frame.stream_id;
@@ -462,17 +444,14 @@ void storeDataProcessor(DATA_ARRIVAL ev, myContext ctx, list<event_t> events, li
 }
 
 void bufferManagerProcessor(DATA_ARRIVAL ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
-    // by value or by reference??
-    //TODO: copy by reference
     for(int i = 0;i<qsbs.size();i++){
         int size = 0;
-        while(qsbs[i].received[size]!=false)
+        while(qsbs[i].received[size]!=false)//.calculates the size of in order data
             size++;
         if(size >= ctx.move_to_memory_size_thresh){
-            /*
-                add code to move the segment to the memory.
-            */
-            qsbs.offset += size;
+            mem_write(qsbs[i].address, qsbs[i].data[0:size], qsbs[i].offset, size);
+            qsbs[i].data=qsbs[i].data[size:-1];//Question: is this (-1) allowed? Answer: no, keep the end in a seprate var
+            qsbs[i].offset += size;
         }
     }
 
@@ -490,7 +469,7 @@ struct ackFrame{
     int range_count;
     int first_ack_range;
     list<AckRange> ack_ranges;
-    int ecn_count;\\what to do?
+    int ecn_count;
 }
 
 void ackGenerationProcessor(DATA_ARRIVAL ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
@@ -515,7 +494,7 @@ void ackGenerationProcessor(DATA_ARRIVAL ev, myContext ctx, list<event_t> events
         }else if(!count_gap && ctx.recieved_packets[j] == false){
             range.ack_range_length = count;
             frame.ack_ranges.add(range);
-            range = new AckRange //???????
+            range = new AckRange;
             count = 1;
             count_gap = true;
         }else{
@@ -529,23 +508,36 @@ void ackGenerationProcessor(DATA_ARRIVAL ev, myContext ctx, list<event_t> events
     }
     frame.ack_ranges.add(range);
 
-    out.frame_buffer.add(frame);
+    out.frames.add(frame);
 
 }
 
+//TODO: add MAX_BUFFER_SIZE.
+//TODO: add RX_MODULE based on the example.
+
 void packetGenerationProcessor(DATA_ARRIVAL ev, myContext ctx, list<event_t> events, list<pkt_t> packets, interm_out out) {
-
-\\TODO: create ack packet and add to tx_queue;    
-
+    pkt_t new_pkt = new_pkt();
+    for(Frame frame: out.frames){
+        new_pkt.add_data(byte(frame));
+    }
+    PacketInfo pkt_info
+    pkt_info.time_sent=now()
+    QuicHeader qheader;
+    qheader.pkt_id = ctx.id_counter++
+    pkt_info.packet_id = qheader.pkt_id
+    new_pkt.add_header(qheader)
+    ctx.sent_packets.add(pkt_info)
+    tx_module.add(new_pkt);// pick a queue to add a packet   
 }
 
 /*Dispatch Table*/
 
 dispatch table{
-    SEND -> {selectDataProcessor, sendProcessor}
-    ACK -> {ackProcessor ,congestionProcessor,updateRttProcessor,lossDetectionProcessor, congestionProcessor,  adjustWindowProcessor, retransmitProcessor}
-    TIMER -> {lossDetectionProcessor,congestionProcessor,retransmitProcessor}
+    //SENDER
+    SEND -> {selectDataProcessor, sendProcessor, packetGenerationProcessor}
+    ACK -> {ackProcessor ,congestionProcessor,updateRttProcessor,lossDetectionProcessor, congestionProcessor,  adjustWindowProcessor, retransmitProcessor, packetGenerationProcessor}
+    TIMER -> {lossDetectionProcessor,congestionProcessor,retransmitProcessor, packetGenerationProcessor}
     ADD_DATA -> {addStreamProcessor}
-
+    //RECEIVER
     DATA_ARRIVAL -> {storeDataProcessor, bufferManagerProcessor, ackGenerationProcessor, packetGenerationProcessor}
 }
